@@ -1,0 +1,204 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/material.dart';
+import 'package:record/record.dart';
+import '../../../../core/native/audio_channel.dart';
+
+enum ScreeningState { idle, recording, processing, success, error }
+
+class ScreeningProvider extends ChangeNotifier {
+  final AudioRecorder _recorder = AudioRecorder();
+  final AudioChannel _audioChannel = AudioChannel();
+
+  // Unified Wizard Step (0: Questionnaire, 1: Cough Recording)
+  int _currentStep = 0;
+
+  // Questionnaire States (FR-003)
+  int? _age;
+  final Map<int, bool> _answers = {
+    0: false, // Batuk Lama
+    1: false, // Batuk Berdarah
+    2: false, // Demam
+    3: false, // Berat Badan Turun
+    4: false, // Keringat Malam
+    5: false, // Nyeri Dada
+    6: false, // Nafsu Makan Turun
+    7: false, // Lemas/Malaise
+    8: false, // Kontak Erat TBC
+    9: false, // Riwayat Merokok
+  };
+
+  ScreeningState _state = ScreeningState.idle;
+  String? _errorMessage;
+  String? _recordedFilePath;
+  Float32List? _mfccData;
+  double _recordingProgress = 0.0; // Seconds elapsed (0.0 to 5.0)
+  Timer? _timer;
+
+  // Getters
+  int get currentStep => _currentStep;
+  int? get age => _age;
+  Map<int, bool> get answers => _answers;
+  ScreeningState get state => _state;
+  String? get errorMessage => _errorMessage;
+  String? get recordedFilePath => _recordedFilePath;
+  Float32List? get mfccData => _mfccData;
+  double get recordingProgress => _recordingProgress;
+
+  // Setters & Actions
+  void setStep(int step) {
+    _currentStep = step;
+    notifyListeners();
+  }
+
+  void setAge(int? value) {
+    _age = value;
+    notifyListeners();
+  }
+
+  void setAnswer(int index, bool value) {
+    _answers[index] = value;
+    notifyListeners();
+  }
+
+  void toggleAnswer(int index) {
+    _answers[index] = !(_answers[index] ?? false);
+    notifyListeners();
+  }
+
+  /// Validates the age input
+  bool validateQuestionnaire() {
+    if (_age == null || _age! <= 0 || _age! > 120) {
+      _state = ScreeningState.error;
+      _errorMessage = 'Usia harus diisi dengan angka yang valid (1 - 120).';
+      notifyListeners();
+      return false;
+    }
+    _state = ScreeningState.idle;
+    _errorMessage = null;
+    notifyListeners();
+    return true;
+  }
+
+  /// Encodes questionnaire answers to a binary list of 1s and 0s (FR-003)
+  List<int> getEncodedAnswers() {
+    return List.generate(10, (index) => (_answers[index] ?? false) ? 1 : 0);
+  }
+
+  /// Starts the 5-second cough recording
+  Future<void> startRecording() async {
+    _state = ScreeningState.recording;
+    _errorMessage = null;
+    _recordingProgress = 0.0;
+    _mfccData = null;
+    notifyListeners();
+
+    try {
+      // Request microphone permissions
+      if (!await _recorder.hasPermission()) {
+        _state = ScreeningState.error;
+        _errorMessage = 'Izin mikrofon ditolak. Silakan berikan izin di pengaturan.';
+        notifyListeners();
+        return;
+      }
+
+      // Define standard WAV cache path using system temp directory
+      final tempDir = Directory.systemTemp;
+      final path = '${tempDir.path}/cough_record.wav';
+      
+      // Clean up previous file if any
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+      }
+
+      // Start recording at 16kHz Mono WAV as required by FR-001
+      await _recorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.wav,
+          sampleRate: 16000,
+          numChannels: 1,
+        ),
+        path: path,
+      );
+
+      _recordedFilePath = path;
+
+      // Automatically stops the recording after exactly 5.0 seconds
+      _timer = Timer.periodic(const Duration(milliseconds: 100), (timer) async {
+        _recordingProgress += 0.1;
+        if (_recordingProgress >= 5.0) {
+          _recordingProgress = 5.0;
+          timer.cancel();
+          await stopAndProcessRecording();
+        } else {
+          notifyListeners();
+        }
+      });
+    } catch (e) {
+      _state = ScreeningState.error;
+      _errorMessage = 'Gagal memulai rekaman: $e';
+      notifyListeners();
+    }
+  }
+
+  /// Stops recording and immediately invokes native MFCC extraction
+  Future<void> stopAndProcessRecording() async {
+    _timer?.cancel();
+    if (_state != ScreeningState.recording) return;
+
+    _state = ScreeningState.processing;
+    notifyListeners();
+
+    try {
+      final path = await _recorder.stop();
+      if (path == null) {
+        _state = ScreeningState.error;
+        _errorMessage = 'Perekaman terhenti dengan file kosong.';
+        notifyListeners();
+        return;
+      }
+
+      _recordedFilePath = path;
+
+      // Extract MFCC coefficients over the Method Channel (FR-002)
+      final mfcc = await _audioChannel.extractMfcc(path);
+      if (mfcc.isEmpty) {
+        _state = ScreeningState.error;
+        _errorMessage = 'Gagal melakukan ekstraksi MFCC secara native: Data kosong.';
+      } else {
+        _mfccData = mfcc;
+        _state = ScreeningState.success;
+      }
+      notifyListeners();
+    } catch (e) {
+      _state = ScreeningState.error;
+      _errorMessage = 'Terjadi kesalahan pemrosesan audio: $e';
+      notifyListeners();
+    }
+  }
+
+  /// Resets the recording and questionnaire states back to step 1
+  void reset() {
+    _state = ScreeningState.idle;
+    _errorMessage = null;
+    _recordedFilePath = null;
+    _mfccData = null;
+    _recordingProgress = 0.0;
+    _timer?.cancel();
+    _currentStep = 0;
+    _age = null;
+    for (var i = 0; i < 10; i++) {
+      _answers[i] = false;
+    }
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _recorder.dispose();
+    super.dispose();
+  }
+}
