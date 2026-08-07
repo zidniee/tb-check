@@ -15,4 +15,13 @@
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">?android:colorBackground</item>
     </style>
+    <!-- Custom theme for UCrop image cropper matching WhatsApp dark style and safe status bar -->
+    <style name="UcropTheme" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:statusBarColor">#0B141A</item>
+        <item name="android:windowTranslucentStatus">false</item>
+        <item name="android:windowTranslucentNavigation">false</item>
+        <item name="android:fitsSystemWindows">true</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="colorAccent">#00A884</item>
+    </style>
 </resources>

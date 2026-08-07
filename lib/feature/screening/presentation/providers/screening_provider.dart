@@ -1,15 +1,32 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:record/record.dart';
 import '../../../../core/native/audio_channel.dart';
+import '../../../../core/ai/tflite_service.dart';
+import '../../../../core/network/api_service.dart';
+import '../../data/datasources/screening_remote_data_source.dart';
+import '../../data/repositories/screening_repository_impl.dart';
+import '../../domain/entities/screening_result.dart';
+import '../../domain/repositories/screening_repository.dart';
 
-enum ScreeningState { idle, recording, processing, success, error }
+enum ScreeningState { idle, recording, processing, analyzing, resultReady, error }
 
 class ScreeningProvider extends ChangeNotifier {
   final AudioRecorder _recorder = AudioRecorder();
   final AudioChannel _audioChannel = AudioChannel();
+  late final ScreeningRepository _screeningRepository;
+
+  ScreeningProvider({ScreeningRepository? repository}) {
+    _screeningRepository = repository ??
+        ScreeningRepositoryImpl(
+          remoteDataSource: ScreeningRemoteDataSourceImpl(
+            apiService: ApiService(),
+          ),
+        );
+  }
 
   // Unified Wizard Step (0: Questionnaire, 1: Cough Recording)
   int _currentStep = 0;
@@ -35,6 +52,8 @@ class ScreeningProvider extends ChangeNotifier {
   Float32List? _mfccData;
   double _recordingProgress = 0.0; // Seconds elapsed (0.0 to 5.0)
   Timer? _timer;
+  ScreeningResult? _screeningResult;
+  String? _submittedReportId;
 
   // Getters
   int get currentStep => _currentStep;
@@ -45,6 +64,8 @@ class ScreeningProvider extends ChangeNotifier {
   String? get recordedFilePath => _recordedFilePath;
   Float32List? get mfccData => _mfccData;
   double get recordingProgress => _recordingProgress;
+  ScreeningResult? get screeningResult => _screeningResult;
+  String? get submittedReportId => _submittedReportId;
 
   // Setters & Actions
   void setStep(int step) {
@@ -86,16 +107,32 @@ class ScreeningProvider extends ChangeNotifier {
     return List.generate(10, (index) => (_answers[index] ?? false) ? 1 : 0);
   }
 
+  Map<String, dynamic> getClinicalAnswersMap() {
+    return {
+      'age': _age,
+      'batuk_lama': _answers[0] ?? false,
+      'batuk_berdarah': _answers[1] ?? false,
+      'demam': _answers[2] ?? false,
+      'berat_badan_turun': _answers[3] ?? false,
+      'keringat_malam': _answers[4] ?? false,
+      'nyeri_dada': _answers[5] ?? false,
+      'nafsu_makan_turun': _answers[6] ?? false,
+      'malaise': _answers[7] ?? false,
+      'kontak_tbc': _answers[8] ?? false,
+      'riwayat_merokok': _answers[9] ?? false,
+    };
+  }
+
   /// Starts the 5-second cough recording
   Future<void> startRecording() async {
     _state = ScreeningState.recording;
     _errorMessage = null;
     _recordingProgress = 0.0;
     _mfccData = null;
+    _submittedReportId = null;
     notifyListeners();
 
     try {
-      // Request microphone permissions
       if (!await _recorder.hasPermission()) {
         _state = ScreeningState.error;
         _errorMessage = 'Izin mikrofon ditolak. Silakan berikan izin di pengaturan.';
@@ -103,17 +140,14 @@ class ScreeningProvider extends ChangeNotifier {
         return;
       }
 
-      // Define standard WAV cache path using system temp directory
       final tempDir = Directory.systemTemp;
       final path = '${tempDir.path}/cough_record.wav';
       
-      // Clean up previous file if any
       final file = File(path);
       if (await file.exists()) {
         await file.delete();
       }
 
-      // Start recording at 16kHz Mono WAV as required by FR-001
       await _recorder.start(
         const RecordConfig(
           encoder: AudioEncoder.wav,
@@ -125,7 +159,6 @@ class ScreeningProvider extends ChangeNotifier {
 
       _recordedFilePath = path;
 
-      // Automatically stops the recording after exactly 5.0 seconds
       _timer = Timer.periodic(const Duration(milliseconds: 100), (timer) async {
         _recordingProgress += 0.1;
         if (_recordingProgress >= 5.0) {
@@ -162,16 +195,15 @@ class ScreeningProvider extends ChangeNotifier {
 
       _recordedFilePath = path;
 
-      // Extract MFCC coefficients over the Method Channel (FR-002)
       final mfcc = await _audioChannel.extractMfcc(path);
       if (mfcc.isEmpty) {
         _state = ScreeningState.error;
         _errorMessage = 'Gagal melakukan ekstraksi MFCC secara native: Data kosong.';
+        notifyListeners();
       } else {
         _mfccData = mfcc;
-        _state = ScreeningState.success;
+        await runAiInference();
       }
-      notifyListeners();
     } catch (e) {
       _state = ScreeningState.error;
       _errorMessage = 'Terjadi kesalahan pemrosesan audio: $e';
@@ -179,7 +211,119 @@ class ScreeningProvider extends ChangeNotifier {
     }
   }
 
-  /// Resets the recording and questionnaire states back to step 1
+  /// Runs AI inference using local TFLite model AND submits report to backend API
+  Future<void> runAiInference() async {
+    if (_mfccData == null || _mfccData!.isEmpty) {
+      _state = ScreeningState.error;
+      _errorMessage = 'Data fitur MFCC kosong. Tidak dapat melakukan inferensi AI.';
+      notifyListeners();
+      return;
+    }
+
+    // ============================================================================
+    // Input Validation (Added 2026-08-04)
+    // ============================================================================
+    // Validate MFCC data to detect abnormal patterns that could affect inference
+    final validationResult = _validateMfccData(_mfccData!);
+    if (!validationResult.isValid) {
+      developer.log(
+        'MFCC validation warning: ${validationResult.message}',
+        name: 'ScreeningProvider',
+      );
+      // Continue with inference but log the warning
+      // In production, you might want to alert the user or abort
+    }
+
+    _state = ScreeningState.analyzing;
+    notifyListeners();
+
+    try {
+      final tfliteService = TfliteService();
+      final result = await tfliteService.runInference(_mfccData!);
+      _screeningResult = result;
+
+      // Submit report to Backend API
+      final submitRes = await _screeningRepository.submitReport(
+        probabilityScore: result.probabilityScore,
+        predictionStatus: result.screeningStatus,
+        mfccMeanVector: _mfccData!.toList(),
+        clinicalAnswers: getClinicalAnswersMap(),
+      );
+
+      submitRes.fold(
+        (failure) {
+          // Keep local result ready even if remote save fails
+          _submittedReportId = null;
+        },
+        (reportDTO) {
+          _submittedReportId = reportDTO.reportId;
+        },
+      );
+
+      _state = ScreeningState.resultReady;
+      notifyListeners();
+    } catch (e) {
+      _state = ScreeningState.error;
+      _errorMessage = 'Gagal menjalankan inferensi AI: $e';
+      notifyListeners();
+    }
+  }
+
+  /// Validates MFCC data to detect abnormal patterns
+  /// Added: 2026-08-04 - Part of quantization bug fix
+  ValidationResult _validateMfccData(Float32List data) {
+    // Check for NaN or Infinity
+    for (var val in data) {
+      if (val.isNaN || val.isInfinite) {
+        return ValidationResult(
+          isValid: false,
+          message: 'MFCC contains NaN or Infinity values',
+        );
+      }
+    }
+
+    // Compute statistics
+    double minVal = data[0];
+    double maxVal = data[0];
+    double sum = 0.0;
+    
+    for (var val in data) {
+      if (val < minVal) minVal = val;
+      if (val > maxVal) maxVal = val;
+      sum += val;
+    }
+    
+    final mean = sum / data.length;
+    final absMax = maxVal > minVal.abs() ? maxVal : minVal.abs();
+
+    // Expected: CMVN normalized data (mean ≈ 0, std ≈ 1)
+    if (mean.abs() > 0.5) {
+      return ValidationResult(
+        isValid: false,
+        message: 'MFCC mean too far from 0: ${mean.toStringAsFixed(3)} (expected ≈0)',
+      );
+    }
+
+    if (absMax > 5.0) {
+      return ValidationResult(
+        isValid: false,
+        message: 'MFCC max value abnormal: ${absMax.toStringAsFixed(3)} (expected <3)',
+      );
+    }
+
+    // Check for saturation (too many identical values)
+    final uniqueValues = data.toSet().length;
+    final saturationRatio = uniqueValues / data.length;
+    if (saturationRatio < 0.3) {
+      return ValidationResult(
+        isValid: false,
+        message: 'MFCC appears saturated: ${(saturationRatio * 100).toStringAsFixed(1)}% unique values',
+      );
+    }
+
+    return ValidationResult(isValid: true, message: 'OK');
+  }
+
   void reset() {
     _state = ScreeningState.idle;
     _errorMessage = null;
@@ -189,6 +333,8 @@ class ScreeningProvider extends ChangeNotifier {
     _timer?.cancel();
     _currentStep = 0;
     _age = null;
+    _screeningResult = null;
+    _submittedReportId = null;
     for (var i = 0; i < 10; i++) {
       _answers[i] = false;
     }
@@ -201,4 +347,12 @@ class ScreeningProvider extends ChangeNotifier {
     _recorder.dispose();
     super.dispose();
   }
+}
+
+/// Helper class for MFCC validation results
+class ValidationResult {
+  final bool isValid;
+  final String message;
+  
+  ValidationResult({required this.isValid, required this.message});
 }

@@ -7,7 +7,9 @@ import '../../../profile/presentation/providers/profile_provider.dart';
 import '../widgets/patient_progress_chart.dart';
 import '../widgets/risk_distribution_chart.dart';
 
-class DoctorDashboardPage extends StatelessWidget {
+import '../providers/doctor_dashboard_provider.dart';
+
+class DoctorDashboardPage extends StatefulWidget {
   final VoidCallback onPatientsTabTap;
   final VoidCallback onConsultationsTabTap;
 
@@ -16,6 +18,19 @@ class DoctorDashboardPage extends StatelessWidget {
     required this.onPatientsTabTap,
     required this.onConsultationsTabTap,
   });
+
+  @override
+  State<DoctorDashboardPage> createState() => _DoctorDashboardPageState();
+}
+
+class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<DoctorDashboardProvider>(context, listen: false).fetchDashboard();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +76,7 @@ class DoctorDashboardPage extends StatelessWidget {
                 icon: Icons.assignment_late_rounded,
                 iconColor: const Color(0xFFEF4444),
                 bgColor: const Color(0xFFFEF2F2),
-                onTap: onPatientsTabTap,
+                onTap: widget.onPatientsTabTap,
               ),
               const SizedBox(height: 10),
               _buildQuickAccessCard(
@@ -70,7 +85,7 @@ class DoctorDashboardPage extends StatelessWidget {
                 icon: Icons.chat_bubble_outline_rounded,
                 iconColor: const Color(0xFF0D9488),
                 bgColor: const Color(0xFFF0FDF4),
-                onTap: onConsultationsTabTap,
+                onTap: widget.onConsultationsTabTap,
               ),
               const SizedBox(height: 24),
 

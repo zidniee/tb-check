@@ -1,15 +1,34 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../../core/config/env_config.dart';
+import '../../../../core/storage/secure_storage_service.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/snackbar_utils.dart';
 import '../../../auth/presentation/pages/login_page.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/profile_provider.dart';
 import 'edit_profile_page.dart';
+import 'profile_picture_viewer_page.dart';
+import 'notification_settings_page.dart';
 
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider = Provider.of<ProfileProvider>(context, listen: false);
+      provider.fetchProfile();
+      provider.updateGPSLocation();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -90,8 +109,13 @@ class ProfilePage extends StatelessWidget {
                   iconColor: AppColors.success,
                   iconBgColor: AppColors.successLight,
                   title: 'Pengaturan Notifikasi',
-                  subtitle: 'Atur pengingat skrining harian',
-                  onTap: () => SnackBarUtils.showInfo(context, 'Fitur pengaturan notifikasi segera hadir.'),
+                  subtitle: 'Atur preferensi pengingat Anda',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const NotificationSettingsPage()),
+                    );
+                  },
                 ),
                 _buildDivider(),
                 _buildMenuItem(
@@ -147,32 +171,31 @@ class ProfilePage extends StatelessWidget {
         // Avatar stack with edit button
         Stack(
           children: [
-            Container(
-              width: 96,
-              height: 96,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [Color(0xFF1E2D3D), Color(0xFF3D6285)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: profileProvider.profilePicturePath != null && profileProvider.profilePicturePath!.isNotEmpty
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(48),
-                      child: Image.file(
-                        File(profileProvider.profilePicturePath!),
-                        width: 96,
-                        height: 96,
-                        fit: BoxFit.cover,
-                      ),
-                    )
-                  : Icon(
-                      isDoctor ? Icons.medical_services_rounded : Icons.person_rounded,
-                      color: Colors.white,
-                      size: 54,
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ProfilePictureViewerPage(
+                      imagePath: profileProvider.profilePicturePath,
+                      isDoctor: isDoctor,
                     ),
+                  ),
+                );
+              },
+              child: Container(
+                width: 96,
+                height: 96,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF1E2D3D), Color(0xFF3D6285)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: _buildAvatarImage(profileProvider.profilePicturePath, isDoctor),
+              ),
             ),
             Positioned(
               right: 0,
@@ -205,6 +228,9 @@ class ProfilePage extends StatelessWidget {
         // Name
         Text(
           isDoctor ? profileProvider.doctorName : profileProvider.fullName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
           style: AppTextStyles.labelLarge.copyWith(
             fontSize: 20,
             fontWeight: FontWeight.bold,
@@ -214,9 +240,7 @@ class ProfilePage extends StatelessWidget {
         const SizedBox(height: 4),
         // Email
         Text(
-          isDoctor
-              ? 'doctor@email.com'
-              : (authProvider.email.isNotEmpty ? authProvider.email : 'demo@email.com'),
+          profileProvider.email.isNotEmpty ? profileProvider.email : 'demo@email.com',
           style: AppTextStyles.bodyMedium.copyWith(
             color: AppColors.textSecondary,
             fontSize: 14,
@@ -478,10 +502,10 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  void _showLogoutDialog(BuildContext context) {
+  void _showLogoutDialog(BuildContext pageContext) {
     showDialog(
-      context: context,
-      builder: (BuildContext context) {
+      context: pageContext,
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
           backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(
@@ -498,27 +522,29 @@ class ProfilePage extends StatelessWidget {
           actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
               child: Text(
                 'Batal',
                 style: AppTextStyles.labelMedium.copyWith(color: AppColors.textSecondary),
               ),
             ),
             ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Close dialog
-                
-                // Clear provider and navigate back to login
-                final authProvider = Provider.of<AuthProvider>(context, listen: false);
-                authProvider.clearErrors();
-                
-                SnackBarUtils.showSuccess(context, 'Berhasil keluar akun.');
-                
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (context) => const LoginPage()),
-                  (route) => false,
-                );
+              onPressed: () async {
+                final authProvider = Provider.of<AuthProvider>(pageContext, listen: false);
+                final profileProvider = Provider.of<ProfileProvider>(pageContext, listen: false);
+
+                Navigator.of(dialogContext).pop();
+
+                await authProvider.logout();
+                profileProvider.clearProfile();
+
+                if (pageContext.mounted) {
+                  SnackBarUtils.showSuccess(pageContext, 'Berhasil keluar akun.');
+                  Navigator.of(pageContext, rootNavigator: true).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const LoginPage()),
+                    (route) => false,
+                  );
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.redAccent,
@@ -536,5 +562,73 @@ class ProfilePage extends StatelessWidget {
         );
       },
     );
+  }
+
+  Widget _buildAvatarImage(String? path, bool isDoctor) {
+    final defaultIcon = Icon(
+      isDoctor ? Icons.medical_services_rounded : Icons.person_rounded,
+      color: Colors.white,
+      size: 54,
+    );
+
+    if (path == null || path.isEmpty) {
+      return defaultIcon;
+    }
+
+    if (File(path).existsSync()) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(48),
+        child: Image.file(
+          File(path),
+          width: 96,
+          height: 96,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => defaultIcon,
+        ),
+      );
+    }
+
+    final String fullUrl = (path.startsWith('http://') || path.startsWith('https://'))
+        ? path
+        : (path.startsWith('/') ? '${EnvConfig.apiBaseUrl}$path' : '');
+
+    if (fullUrl.isNotEmpty) {
+      final bool isInternalApi = fullUrl.startsWith(EnvConfig.apiBaseUrl);
+
+      if (isInternalApi) {
+        return FutureBuilder<String?>(
+          future: SecureStorageService().getAccessToken(),
+          builder: (context, snapshot) {
+            final token = snapshot.data;
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(48),
+              child: Image.network(
+                fullUrl,
+                headers: (token != null && token.isNotEmpty)
+                    ? {'Authorization': 'Bearer $token'}
+                    : null,
+                width: 96,
+                height: 96,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => defaultIcon,
+              ),
+            );
+          },
+        );
+      }
+
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(48),
+        child: Image.network(
+          fullUrl,
+          width: 96,
+          height: 96,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => defaultIcon,
+        ),
+      );
+    }
+
+    return defaultIcon;
   }
 }

@@ -1,8 +1,33 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import '../../../../core/network/api_exception.dart';
+import '../../../../core/network/api_service.dart';
+import '../../../../core/storage/secure_storage_service.dart';
+import '../../data/datasources/auth_remote_data_source.dart';
+import '../../data/repositories/auth_repository_impl.dart';
+import '../../domain/repositories/auth_repository.dart';
+import '../../domain/usecases/login_with_google.dart';
 
 enum UserRole { patient, doctor }
 
 class AuthProvider extends ChangeNotifier {
+  late final AuthRepository _authRepository;
+  late final LoginWithGoogleUseCase _loginWithGoogleUseCase;
+
+  AuthProvider({AuthRepository? authRepository}) {
+    _authRepository = authRepository ??
+        AuthRepositoryImpl(
+          remoteDataSource: AuthRemoteDataSourceImpl(
+            apiService: ApiService(),
+            googleSignIn: GoogleSignIn.instance,
+          ),
+          storageService: SecureStorageService(),
+        );
+
+    _loginWithGoogleUseCase = LoginWithGoogleUseCase(_authRepository);
+  }
+
   // Login & Shared State
   String _email = '';
   String _password = '';
@@ -10,6 +35,7 @@ class AuthProvider extends ChangeNotifier {
   bool _rememberMe = false;
   bool _isLoading = false;
   UserRole _userRole = UserRole.patient;
+  bool _isUnverified = false;
 
   String? _emailError;
   String? _passwordError;
@@ -20,11 +46,16 @@ class AuthProvider extends ChangeNotifier {
   String _phoneNo = '';
   String _confirmPassword = '';
   bool _obscureConfirmPassword = true;
+  UserRole _signUpRole = UserRole.patient;
 
   String? _nameError;
   String? _phoneNoError;
   String? _confirmPasswordError;
   String? _signUpError;
+
+  // Rate Limit Countdown State
+  int _rateLimitSeconds = 0;
+  Timer? _rateLimitTimer;
 
   // Getters
   String get email => _email;
@@ -33,6 +64,7 @@ class AuthProvider extends ChangeNotifier {
   bool get rememberMe => _rememberMe;
   bool get isLoading => _isLoading;
   UserRole get userRole => _userRole;
+  bool get isUnverified => _isUnverified;
 
   String? get emailError => _emailError;
   String? get passwordError => _passwordError;
@@ -43,11 +75,14 @@ class AuthProvider extends ChangeNotifier {
   String get phoneNo => _phoneNo;
   String get confirmPassword => _confirmPassword;
   bool get obscureConfirmPassword => _obscureConfirmPassword;
+  UserRole get signUpRole => _signUpRole;
 
   String? get nameError => _nameError;
   String? get phoneNoError => _phoneNoError;
   String? get confirmPasswordError => _confirmPasswordError;
   String? get signUpError => _signUpError;
+
+  int get rateLimitSeconds => _rateLimitSeconds;
 
   // Setters & Actions (Login/Shared)
   void setEmail(String value) {
@@ -106,15 +141,20 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setSignUpRole(UserRole role) {
+    _signUpRole = role;
+    notifyListeners();
+  }
+
   // Validation
   bool validateEmail() {
     final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
     if (_email.isEmpty) {
-      _emailError = 'Email cannot be empty';
+      _emailError = 'Email tidak boleh kosong';
       notifyListeners();
       return false;
     } else if (!emailRegex.hasMatch(_email)) {
-      _emailError = 'Please enter a valid email address';
+      _emailError = 'Masukkan alamat email yang valid';
       notifyListeners();
       return false;
     }
@@ -125,11 +165,11 @@ class AuthProvider extends ChangeNotifier {
 
   bool validatePassword() {
     if (_password.isEmpty) {
-      _passwordError = 'Password cannot be empty';
+      _passwordError = 'Password tidak boleh kosong';
       notifyListeners();
       return false;
     } else if (_password.length < 6) {
-      _passwordError = 'Password must be at least 6 characters';
+      _passwordError = 'Password minimal 6 karakter';
       notifyListeners();
       return false;
     }
@@ -140,11 +180,11 @@ class AuthProvider extends ChangeNotifier {
 
   bool validateName() {
     if (_name.isEmpty) {
-      _nameError = 'Name cannot be empty';
+      _nameError = 'Nama tidak boleh kosong';
       notifyListeners();
       return false;
     } else if (_name.length < 3) {
-      _nameError = 'Name must be at least 3 characters';
+      _nameError = 'Nama minimal 3 karakter';
       notifyListeners();
       return false;
     }
@@ -156,15 +196,15 @@ class AuthProvider extends ChangeNotifier {
   bool validatePhoneNo() {
     final phoneRegex = RegExp(r'^[+0-9]+$');
     if (_phoneNo.isEmpty) {
-      _phoneNoError = 'Phone number cannot be empty';
+      _phoneNoError = 'Nomor telepon tidak boleh kosong';
       notifyListeners();
       return false;
     } else if (!phoneRegex.hasMatch(_phoneNo)) {
-      _phoneNoError = 'Please enter a valid phone number';
+      _phoneNoError = 'Masukkan nomor telepon yang valid';
       notifyListeners();
       return false;
     } else if (_phoneNo.length < 9) {
-      _phoneNoError = 'Phone number must be at least 9 digits';
+      _phoneNoError = 'Nomor telepon minimal 9 digit';
       notifyListeners();
       return false;
     }
@@ -175,11 +215,11 @@ class AuthProvider extends ChangeNotifier {
 
   bool validateConfirmPassword() {
     if (_confirmPassword.isEmpty) {
-      _confirmPasswordError = 'Please confirm your password';
+      _confirmPasswordError = 'Konfirmasi password tidak boleh kosong';
       notifyListeners();
       return false;
     } else if (_confirmPassword != _password) {
-      _confirmPasswordError = 'Passwords do not match';
+      _confirmPasswordError = 'Password tidak cocok';
       notifyListeners();
       return false;
     }
@@ -188,10 +228,11 @@ class AuthProvider extends ChangeNotifier {
     return true;
   }
 
-  // Simulated Login Request
+  // Real API Login Request
   Future<bool> login() async {
     _loginError = null;
-    
+    _isUnverified = false;
+
     final isEmailValid = validateEmail();
     final isPasswordValid = validatePassword();
 
@@ -202,29 +243,63 @@ class AuthProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    // Simulate network delay
-    await Future.delayed(const Duration(seconds: 2));
+    final result = await _authRepository.login(
+      email: _email,
+      password: _password,
+    );
 
-    // Simple mockup check: credentials are demo@email.com or doctor@email.com / password123
-    if (_email == 'demo@email.com' && _password == 'password123') {
-      _userRole = UserRole.patient;
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } else if (_email == 'doctor@email.com' && _password == 'password123') {
-      _userRole = UserRole.doctor;
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } else {
-      _isLoading = false;
-      _loginError = 'Invalid email or password. Use demo@email.com or doctor@email.com / password123';
-      notifyListeners();
-      return false;
-    }
+    _isLoading = false;
+
+    return result.fold(
+      (failure) {
+        if (failure is ForbiddenException) {
+          _isUnverified = true;
+          _loginError = 'Email belum diverifikasi. Silakan masukkan OTP.';
+        } else if (failure is RateLimitException) {
+          _startRateLimitCountdown(60);
+          _loginError = failure.message;
+        } else {
+          _loginError = failure.message;
+        }
+        notifyListeners();
+        return false;
+      },
+      (authResponse) {
+        _userRole = authResponse.user.role == 'DOCTOR' ? UserRole.doctor : UserRole.patient;
+        notifyListeners();
+        return true;
+      },
+    );
   }
 
-  // Simulated Sign Up Request
+  // Google Sign-In Request
+  Future<bool> loginWithGoogle() async {
+    _loginError = null;
+    _isLoading = true;
+    notifyListeners();
+
+    final result = await _loginWithGoogleUseCase();
+
+    _isLoading = false;
+
+    return result.fold(
+      (failure) async {
+        _loginError = failure.message;
+        try {
+          await GoogleSignIn.instance.signOut();
+        } catch (_) {}
+        notifyListeners();
+        return false;
+      },
+      (authResponse) {
+        _userRole = authResponse.user.role == 'DOCTOR' ? UserRole.doctor : UserRole.patient;
+        notifyListeners();
+        return true;
+      },
+    );
+  }
+
+  // Real API Sign Up Request
   Future<bool> signUp() async {
     _signUpError = null;
 
@@ -241,12 +316,173 @@ class AuthProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    // Simulate network delay
-    await Future.delayed(const Duration(seconds: 2));
+    final roleStr = _signUpRole == UserRole.doctor ? 'DOCTOR' : 'PATIENT';
+    final result = await _authRepository.register(
+      name: _name,
+      email: _email,
+      password: _password,
+      role: roleStr,
+      phoneNumber: _phoneNo,
+    );
 
     _isLoading = false;
+
+    return result.fold(
+      (failure) {
+        if (failure is RateLimitException) {
+          _startRateLimitCountdown(60);
+        }
+        _signUpError = failure.message;
+        notifyListeners();
+        return false;
+      },
+      (_) {
+        _isUnverified = true;
+        notifyListeners();
+        return true;
+      },
+    );
+  }
+
+  // OTP Verification Request
+  Future<bool> verifyOTP(String otp) async {
+    _isLoading = true;
+    _loginError = null;
+    _signUpError = null;
     notifyListeners();
-    return true; // Simulate successful registration
+
+    final result = await _authRepository.verifyEmail(
+      email: _email,
+      otp: otp,
+    );
+
+    _isLoading = false;
+
+    return result.fold(
+      (failure) {
+        _loginError = failure.message;
+        _signUpError = failure.message;
+        notifyListeners();
+        return false;
+      },
+      (_) {
+        _isUnverified = false;
+        notifyListeners();
+        return true;
+      },
+    );
+  }
+
+  // Resend OTP Request
+  Future<bool> resendOTP() async {
+    _isLoading = true;
+    notifyListeners();
+
+    final result = await _authRepository.resendOTP(email: _email);
+
+    _isLoading = false;
+
+    return result.fold(
+      (failure) {
+        if (failure is RateLimitException) {
+          _startRateLimitCountdown(60);
+        }
+        _loginError = failure.message;
+        notifyListeners();
+        return false;
+      },
+      (_) {
+        notifyListeners();
+        return true;
+      },
+    );
+  }
+
+  // Forgot Password Request
+  Future<bool> forgotPassword(String targetEmail) async {
+    _isLoading = true;
+    notifyListeners();
+
+    final result = await _authRepository.forgotPassword(email: targetEmail);
+
+    _isLoading = false;
+
+    return result.fold(
+      (failure) {
+        if (failure is RateLimitException) {
+          _startRateLimitCountdown(60);
+        }
+        _loginError = failure.message;
+        notifyListeners();
+        return false;
+      },
+      (_) {
+        _email = targetEmail;
+        notifyListeners();
+        return true;
+      },
+    );
+  }
+
+  // Reset Password Request
+  Future<bool> resetPassword({
+    required String otp,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    _isLoading = true;
+    notifyListeners();
+
+    final result = await _authRepository.resetPassword(
+      email: _email,
+      otp: otp,
+      newPassword: newPassword,
+      confirmPassword: confirmPassword,
+    );
+
+    _isLoading = false;
+
+    return result.fold(
+      (failure) {
+        _loginError = failure.message;
+        notifyListeners();
+        return false;
+      },
+      (_) {
+        notifyListeners();
+        return true;
+      },
+    );
+  }
+
+  void _startRateLimitCountdown(int seconds) {
+    _rateLimitSeconds = seconds;
+    _rateLimitTimer?.cancel();
+    _rateLimitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_rateLimitSeconds > 0) {
+        _rateLimitSeconds--;
+        notifyListeners();
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  Future<void> logout() async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      await GoogleSignIn.instance.signOut();
+    } catch (_) {}
+
+    await _authRepository.logout();
+
+    _userRole = UserRole.patient;
+    _isUnverified = false;
+    clearErrors();
+    _isLoading = false;
+    notifyListeners();
   }
 
   void clearErrors() {
@@ -258,5 +494,11 @@ class AuthProvider extends ChangeNotifier {
     _confirmPasswordError = null;
     _signUpError = null;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _rateLimitTimer?.cancel();
+    super.dispose();
   }
 }

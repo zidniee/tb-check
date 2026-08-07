@@ -9,6 +9,7 @@ import '../../../../shared/widgets/custom_text_field.dart';
 import '../../../../shared/widgets/social_button.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/login_header.dart';
+import 'otp_page.dart';
 import 'sign_up_page.dart';
 import '../../../patient/presentation/pages/main_navigation_page.dart';
 
@@ -156,14 +157,26 @@ class LoginPage extends StatelessWidget {
                           isLoading: authProvider.isLoading,
                           onPressed: () async {
                             final success = await authProvider.login();
-                            if (success && context.mounted) {
-                              SnackBarUtils.showSuccess(context, 'Login successful!');
+                            if (!context.mounted) return;
+
+                            if (success) {
+                              SnackBarUtils.showSuccess(context, 'Login berhasil!');
                               Navigator.pushReplacement(
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) => const MainNavigationPage(),
                                 ),
                               );
+                            } else if (authProvider.isUnverified) {
+                              SnackBarUtils.showInfo(context, 'Email belum diverifikasi. Membuka halaman OTP...');
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => OtpPage(email: authProvider.email),
+                                ),
+                              );
+                            } else if (authProvider.loginError != null) {
+                              SnackBarUtils.showError(context, authProvider.loginError!);
                             }
                           },
                         ),
@@ -203,8 +216,22 @@ class LoginPage extends StatelessWidget {
                           children: [
                             SocialButton(
                               icon: const GoogleLogo(size: 24),
-                              onTap: () {
-                                SnackBarUtils.showInfo(context, 'Google Sign In pressed');
+                              onTap: () async {
+                                final authProvider = context.read<AuthProvider>();
+                                final success = await authProvider.loginWithGoogle();
+                                
+                                if (success && context.mounted) {
+                                  Navigator.pushReplacement(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => const MainNavigationPage(),
+                                    ),
+                                  );
+                                } else {
+                                  if (context.mounted && authProvider.loginError != null) {
+                                    SnackBarUtils.showError(context, authProvider.loginError!);
+                                  }
+                                }
                               },
                             ),
                             const SizedBox(width: 16),

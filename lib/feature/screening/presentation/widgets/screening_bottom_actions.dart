@@ -28,37 +28,33 @@ class ScreeningBottomActions extends StatelessWidget {
       );
     }
 
-    // Actions on Step 2: Recording (Success state)
-    if (provider.state == ScreeningState.success) {
+    // Actions on Step 2: Recording (Processing / Analyzing / ResultReady state)
+    final isLoading = provider.state == ScreeningState.processing ||
+        provider.state == ScreeningState.analyzing ||
+        provider.state == ScreeningState.resultReady;
+
+    if (isLoading) {
       return Row(
         children: [
           Expanded(
             child: OutlinedButton(
-              onPressed: () => provider.reset(),
+              onPressed: null,
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppColors.primary),
+                side: const BorderSide(color: AppColors.border),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
               child: Text(
-                'Mulai Baru',
-                style: AppTextStyles.labelLarge.copyWith(color: AppColors.primary),
+                'Kembali',
+                style: AppTextStyles.labelLarge.copyWith(color: AppColors.textSecondary.withOpacity(0.5)),
               ),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: CustomButton(
-              text: 'Kirim Skrining',
-              onPressed: () {
-                final encodedAnswers = provider.getEncodedAnswers();
-                final age = provider.age;
-
-                SnackBarUtils.showSuccess(
-                  context,
-                  'Skrining terkirim!\nJawaban: $encodedAnswers | Usia: $age\nMFCC size: ${provider.mfccData?.length ?? 0}',
-                );
-              },
+              text: provider.state == ScreeningState.processing ? 'Mengekstrak...' : 'Menganalisis...',
+              onPressed: null,
             ),
           ),
         ],
@@ -74,7 +70,7 @@ class ScreeningBottomActions extends StatelessWidget {
       );
     }
 
-    // Actions on Step 2: Recording (Idle / Error / Processing state)
+    // Actions on Step 2: Recording (Idle / Error state)
     return Row(
       children: [
         Expanded(
@@ -97,7 +93,7 @@ class ScreeningBottomActions extends StatelessWidget {
         Expanded(
           child: CustomButton(
             text: 'Mulai Rekam Batuk',
-            onPressed: provider.state == ScreeningState.processing ? null : () => provider.startRecording(),
+            onPressed: () => provider.startRecording(),
           ),
         ),
       ],

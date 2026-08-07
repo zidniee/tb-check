@@ -121,8 +121,8 @@ class AppTheme {
       colorScheme: const ColorScheme.light(
         primary: AppColors.primary,
         secondary: AppColors.secondary,
-        background: AppColors.background,
-        surface: AppColors.surface,
+        surface: AppColors.background,
+        surfaceContainerHighest: AppColors.surface,
         error: Colors.redAccent,
       ),
       textTheme: TextTheme(

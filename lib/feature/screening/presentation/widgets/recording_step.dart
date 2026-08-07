@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../providers/screening_provider.dart';
+import '../pages/screening_result_page.dart';
 
 class RecordingStep extends StatefulWidget {
   final ScreeningProvider provider;
@@ -41,11 +42,60 @@ class _RecordingStepState extends State<RecordingStep> with SingleTickerProvider
         return _buildRecordingState(context, widget.provider);
       case ScreeningState.processing:
         return _buildProcessingState(context);
-      case ScreeningState.success:
-        return _buildSuccessState(context, widget.provider);
+      case ScreeningState.analyzing:
+        return _buildAnalyzingState(context);
+      case ScreeningState.resultReady:
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (widget.provider.screeningResult != null) {
+            final result = widget.provider.screeningResult!;
+            final age = widget.provider.age ?? 0;
+            final answers = widget.provider.getEncodedAnswers();
+            
+            // Reset provider so the screening page returns to a clean state
+            widget.provider.reset();
+            
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => ScreeningResultPage(
+                  result: result,
+                  age: age,
+                  encodedAnswers: answers,
+                ),
+              ),
+            );
+          }
+        });
+        return _buildAnalyzingState(context);
       case ScreeningState.error:
         return _buildErrorState(context, widget.provider);
     }
+  }
+
+  Widget _buildAnalyzingState(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const SizedBox(
+          width: 60,
+          height: 60,
+          child: CircularProgressIndicator(
+            strokeWidth: 4,
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Menjalankan Inferensi AI...',
+          style: AppTextStyles.labelMedium.copyWith(fontSize: 16, color: AppColors.textPrimary),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Model LSTM terkuantisasi lokal sedang menganalisis sinyal akustik batuk Anda secara privat.',
+          style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary, height: 1.4, fontSize: 13),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
   }
 
   Widget _buildIdleState(BuildContext context, ScreeningProvider provider) {
@@ -195,174 +245,7 @@ class _RecordingStepState extends State<RecordingStep> with SingleTickerProvider
     );
   }
 
-  Widget _buildSuccessState(BuildContext context, ScreeningProvider provider) {
-    final mfcc = provider.mfccData;
-    final firstCoeffs = mfcc != null && mfcc.length >= 5
-        ? mfcc.take(5).map((e) => e.toStringAsFixed(3)).toList()
-        : [];
-        
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Center(
-          child: Icon(
-            Icons.check_circle_outline_rounded,
-            color: AppColors.success,
-            size: 56,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Center(
-          child: Text(
-            'Ekstraksi Selesai!',
-            style: AppTextStyles.labelMedium.copyWith(fontSize: 18, color: AppColors.textPrimary),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Center(
-          child: Text(
-            'Hasil pengisian kuesioner dan fitur akustik batuk siap diproses.',
-            style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-            textAlign: TextAlign.center,
-          ),
-        ),
-        const SizedBox(height: 16),
-        
-        Expanded(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            child: Column(
-              children: [
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12.0),
-                  decoration: BoxDecoration(
-                    color: AppColors.background,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'LOKASI FILE AUDIO',
-                        style: AppTextStyles.labelMedium.copyWith(fontSize: 10, color: AppColors.textSecondary),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        provider.recordedFilePath ?? '',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: AppColors.textPrimary,
-                          fontFamily: 'monospace',
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14.0),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryLight.withOpacity(0.25),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.primary.withOpacity(0.15)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'METADATA FITUR MULTIMODAL',
-                            style: AppTextStyles.labelMedium.copyWith(
-                              fontSize: 10,
-                              color: AppColors.primaryDark,
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              'Offline',
-                              style: AppTextStyles.bodySmall.copyWith(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Divider(height: 16, color: AppColors.border),
-                      _buildMetaRow('Usia Pengguna', '${provider.age} Tahun'),
-                      _buildMetaRow('Kuesioner Terisi', '${provider.getEncodedAnswers().length} Fitur Biner'),
-                      _buildMetaRow('Hasil Jawaban', provider.getEncodedAnswers().toString()),
-                      _buildMetaRow('Dimensi MFCC', '500 x 39 Matrix (13 MFCC, 13 Delta, 13 Delta-Delta)'),
-                      _buildMetaRow('Jumlah Nilai Data', mfcc != null ? '19.500 Nilai Float32' : '0 Nilai Float32'),
-                      const SizedBox(height: 10),
-                      Text(
-                        '5 Koefisien Pertama Frame Ke-1:',
-                        style: AppTextStyles.labelMedium.copyWith(fontSize: 11, color: AppColors.textPrimary),
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(8.0),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Text(
-                          firstCoeffs.toString(),
-                          style: AppTextStyles.bodySmall.copyWith(
-                            fontFamily: 'monospace',
-                            color: AppColors.primaryDark,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 
-  Widget _buildMetaRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: AppTextStyles.bodySmall.copyWith(color: AppColors.textPrimary, fontSize: 12),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: AppTextStyles.bodySmall.copyWith(
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-                fontSize: 12,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildErrorState(BuildContext context, ScreeningProvider provider) {
     return Column(

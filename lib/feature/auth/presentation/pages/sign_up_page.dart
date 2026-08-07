@@ -142,7 +142,9 @@ class SignUpPage extends StatelessWidget {
                           isLoading: authProvider.isLoading,
                           onPressed: () async {
                             final success = await authProvider.signUp();
-                            if (success && context.mounted) {
+                            if (!context.mounted) return;
+
+                            if (success) {
                               Navigator.push(
                                 context,
                                 PageRouteBuilder(
@@ -164,6 +166,8 @@ class SignUpPage extends StatelessWidget {
                                   transitionDuration: const Duration(milliseconds: 400),
                                 ),
                               );
+                            } else if (authProvider.signUpError != null) {
+                              SnackBarUtils.showError(context, authProvider.signUpError!);
                             }
                           },
                         ),

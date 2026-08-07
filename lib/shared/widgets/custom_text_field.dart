@@ -13,6 +13,7 @@ class CustomTextField extends StatelessWidget {
   final FormFieldValidator<String>? validator;
   final ValueChanged<String>? onChanged;
   final bool showDivider;
+  final bool readOnly;
 
   const CustomTextField({
     super.key,
@@ -27,6 +28,7 @@ class CustomTextField extends StatelessWidget {
     this.validator,
     this.onChanged,
     this.showDivider = true,
+    this.readOnly = false,
   });
 
   @override
@@ -48,6 +50,7 @@ class CustomTextField extends StatelessWidget {
           keyboardType: keyboardType,
           onChanged: onChanged,
           validator: validator,
+          readOnly: readOnly,
           style: AppTextStyles.bodyLarge.copyWith(
             fontSize: 15,
             color: AppColors.textPrimary,

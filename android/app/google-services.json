@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "142660711587",
+    "project_id": "tbcheck-bc3e3",
+    "storage_bucket": "tbcheck-bc3e3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:142660711587:android:e62bfe96a36b7ebc8fbb16",
+        "android_client_info": {
+          "package_name": "com.tbcheck.tbcheck"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC-SN231pOQGicSTddj2yLYbb-Al-_q9WI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

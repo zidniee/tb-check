@@ -8,6 +8,8 @@ import '../../../doctor/presentation/widgets/doctor_bottom_navigation_bar.dart';
 import '../../../doctor/presentation/pages/doctor_dashboard_page.dart';
 import '../../../doctor/presentation/pages/doctor_patients_page.dart';
 import '../../../doctor/presentation/pages/doctor_consultations_page.dart';
+import '../../../education/presentation/pages/education_list_page.dart';
+import '../../../../core/service/fcm_service.dart';
 import '../widgets/patient_bottom_navigation_bar.dart';
 import 'home_page.dart';
 
@@ -20,6 +22,14 @@ class MainNavigationPage extends StatefulWidget {
 
 class _MainNavigationPageState extends State<MainNavigationPage> {
   int _selectedIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FCMService().initialize(context);
+    });
+  }
 
   void _onTabSelected(int index) {
     setState(() {
@@ -35,7 +45,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
     final List<Widget> patientPages = [
       HomePage(onStartScreeningTap: () => _onTabSelected(1)),
       const ScreeningPage(),
-      _buildPlaceholderTab('Edukasi', Icons.school_outlined),
+      const EducationListPage(),
       const ProfilePage(),
     ];
 
@@ -75,34 +85,6 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
                   ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildPlaceholderTab(String title, IconData icon) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(title, style: AppTextStyles.labelLarge),
-        centerTitle: true,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.only(bottom: 100.0),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 64, color: AppColors.textSecondary.withOpacity(0.3)),
-              const SizedBox(height: 16),
-              Text(
-                'Halaman $title sedang dikembangkan.',
-                style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

@@ -28,7 +28,7 @@ Aplikasi TBCheck dirancang sebagai instrumen skrining awal (*screening*) non-inv
 ### 1.4 Ruang Lingkup Produk
 Sistem TBCheck V1.0 terdiri atas komponen-komponen berikut:
 1. **Aplikasi Mobile Pasien (Flutter):** Modul perekaman suara, pengisian kuesioner, modul inferensi AI lokal (100% offline TFLite), peta dokter terdekat, modul chat konsultasi, edukasi herbal, dan modul edukasi terpisah **SVIR Epidemiological Risk Simulator**.
-2. **Aplikasi/Web Dashboard Dokter (Flutter/Web):** Panel monitoring grafik pasien (fluktuasi skor AI & kuesioner), riwayat laporan medis, follow-up status, dan panel chat real-time. (Tidak ada pelabelan S/V/I/R pasien secara individual).
+2. **Aplikasi Dashboard Dokter (Flutter):** Panel monitoring grafik pasien (fluktuasi skor AI & kuesioner), riwayat laporan medis, follow-up status, dan panel chat real-time. (Tidak ada pelabelan S/V/I/R pasien secara individual).
 3. **Cloud Backend (FastAPI / Go):** Layanan perutean chat (WebSockets), sinkronisasi laporan pasien, kueri database spasial (PostGIS) untuk radius dokter terdekat, kalkulasi statistik agregat regional untuk Community Risk Dashboard, dan otorisasi persetujuan (PDP Consent).
 4. **Database & Storage Layer:** Database PostgreSQL dengan ekstensi PostGIS (spasial) dan pgcrypto (UUID & enkripsi kolom).
 
@@ -98,8 +98,19 @@ Skenario: Ekstraksi fitur audio MFCC di layer native pasca-rekam
 ```
 
 #### FR-003: Pengisian Kuesioner Klinis Mandiri
-* **Deskripsi:** Pengguna wajib menjawab kuesioner gejala klinis standar WHO/Kemenkes RI.
-* **EARS:** Ketika pengguna memulai proses skrining baru, sistem harus menampilkan 10 pertanyaan klinis wajib (Ya/Tidak) dan satu input usia numerik, kemudian mengonversinya menjadi representasi biner terenkoding (Ya=1, Tidak=0, usia ternormalisasi min-max).
+* **Deskripsi:** Pengguna wajib menjawab kuesioner gejala klinis standar WHO/Kemenkes RI sebagai salah satu input multimodal model AI.
+* **EARS:** Ketika pengguna memulai proses skrining baru, sistem harus menampilkan 10 pertanyaan klinis wajib (Ya/Tidak) dan satu input usia numerik, kemudian mengonversinya menjadi representasi biner terenkoding (Ya=1, Tidak=0, usia ternormalisasi min-max), serta mengaktifkan tombol lanjut hanya apabila seluruh 11 item telah diisi.
+* **Butir Pertanyaan Kuesioner (WHO/Kemenkes RI):**
+  1. Apakah Anda mengalami batuk berdahak ≥ 2 minggu?
+  2. Apakah Anda pernah batuk berdarah (*haemoptysis*)?
+  3. Apakah Anda mengalami demam berkepanjangan (> 2 minggu) yang tidak diketahui penyebabnya?
+  4. Apakah Anda mengalami keringat malam berlebih tanpa aktivitas fisik?
+  5. Apakah Anda mengalami penurunan berat badan signifikan tanpa sebab jelas?
+  6. Apakah Anda mengalami kelelahan atau lemas berkepanjangan?
+  7. Apakah Anda mengalami sesak napas atau nyeri dada?
+  8. Apakah Anda pernah didiagnosis atau pernah kontak erat dengan penderita TBC?
+  9. Apakah Anda memiliki riwayat imunokompromis (HIV, DM, penggunaan imunosupresan)?
+  10. Apakah Anda belum pernah atau tidak lengkap mendapatkan vaksinasi BCG?
 * **Gherkin (BDD):**
 ```gherkin
 Skenario: Pengisian kuesioner klinis oleh pasien secara lengkap
@@ -108,6 +119,14 @@ Skenario: Pengisian kuesioner klinis oleh pasien secara lengkap
   And Pengguna mencentang "Tidak" pada gejala demam lama
   And Pengguna memasukkan usia "28" tahun
   Then Sistem harus menghasilkan payload clinical_answers JSON terenkoding biner
+
+Skenario: Validasi kuesioner — pengguna mencoba lanjut sebelum semua item terisi
+  Given Pengguna berada di form kuesioner medis
+  And Pengguna baru mengisi 6 dari 11 item
+  When Pengguna menekan tombol "Lanjut ke Perekaman"
+  Then Sistem harus menolak perpindahan halaman
+  And Sistem harus menandai item yang belum diisi dengan indikator warna merah
+  And Sistem harus menampilkan pesan "Harap lengkapi semua pertanyaan sebelum melanjutkan"
 ```
 
 #### FR-004: Inferensi Klasifikasi Biner Offline (TFLite LSTM)
@@ -198,6 +217,91 @@ Skenario: Sinkronisasi otomatis data laporan offline ke cloud server
   When Koneksi internet aktif kembali pada perangkat
   Then Sistem harus memicu background sync worker untuk mengunggah laporan
   And Sistem harus memperbarui status sinkronisasi laporan menjadi "synced" di database lokal
+```
+
+---
+
+### PERSYARATAN DETIL FUNGSIONAL — ALUR SKRINING LENGKAP:
+
+> **Konteks Alur:** Bagian ini mendefinisikan alur *end-to-end* fitur skrining mulai dari pemilihan menu hingga percabangan hasil akhir: **Telemedicine** (jika AI memprediksi `Terkena TBC`) atau **Edukasi Fitokimia** (jika AI memprediksi `Tidak Terkena TBC`).
+>
+> **Catatan Referensi:** FR-011 dan FR-012 adalah persyaratan **baru** yang melengkapi alur ini. Langkah-langkah teknis di dalam alur (kuesioner, perekaman, ekstraksi, inferensi, dan telemedicine) **telah terdefinisi** di FR-001 s/d FR-006 dan **tidak diduplikasi** di sini.
+
+```
+[Pengguna Memilih Menu Skrining di Halaman Utama]
+         │
+         ▼
+[FR-011: Onboarding Skrining — Panduan Proses & Disclaimer]
+         │
+         ▼
+[FR-003: Pengisian Kuesioner Klinis Standar WHO/Kemenkes]
+         │
+         ▼
+[FR-001: Perekaman Suara Batuk Terstandar (WAV 16kHz Mono 5 Detik)]
+         │
+         ▼
+[FR-002: Ekstraksi Fitur Audio Native MFCC → Matriks [500][13]]
+         │
+         ▼
+[FR-004: Inferensi AI Klasifikasi Biner Offline (TFLite LSTM)]
+         │
+    ┌────┴────────┐
+   IYA (≥ 0.50)  TIDAK (< 0.50)
+    │                  │
+    ▼                  ▼
+[FR-006 + FR-005:  [FR-012:
+Pencarian Dokter   Edukasi Fitokimia
+Terdekat &         Herbal Pencegahan]
+PDP Consent &
+Chat Telemedicine]
+```
+
+#### FR-011: Navigasi Masuk Menu Skrining
+* **Deskripsi:** Sistem menyediakan titik masuk menu skrining yang jelas di halaman utama dan menampilkan onboarding singkat sebelum alur dimulai.
+* **EARS:** Ketika pengguna menekan menu **"Skrining TBC"** pada halaman utama aplikasi, sistem harus menampilkan halaman onboarding skrining yang berisi panduan singkat proses (kuesioner → rekam batuk → hasil AI), informasi disclaimer medis ringkas, dan tombol **"Mulai Skrining"** untuk melanjutkan ke langkah kuesioner.
+* **Gherkin (BDD):**
+```gherkin
+Skenario: Pengguna mengakses menu skrining dari halaman utama
+  Given Pengguna berada di halaman utama aplikasi TBCheck
+  When Pengguna menekan tombol "Skrining TBC"
+  Then Sistem harus menampilkan halaman onboarding skrining
+  And Halaman onboarding harus memuat ringkasan 3 langkah proses (Kuesioner, Rekam Batuk, Hasil)
+  And Halaman onboarding harus menampilkan klausul disclaimer medis ringkas
+  And Halaman onboarding harus menyediakan tombol "Mulai Skrining" untuk lanjut ke kuesioner
+```
+
+#### FR-012: Modul Ensiklopedia Fitokimia Herbal Pencegahan TBC
+* **Deskripsi:** Ketika hasil skrining AI menetapkan `screening_status = "Tidak Terkena TBC"`, sistem menyediakan modul edukasi berbasis bukti ilmiah berupa Ensiklopedia Fitokimia Herbal sebagai media pencegahan mandiri.
+* **EARS:** Ketika pengguna menekan tombol **"Lihat Edukasi Pencegahan Herbal"** pada halaman hasil skrining, sistem harus menampilkan Ensiklopedia Fitokimia Herbal yang memuat daftar tanaman herbal terkurasi dengan detail kandungan fitokimia aktif (nama senyawa, golongan, mekanisme aksi antimikroba/imunomodulator, dan referensi ilmiah), menyediakan fitur pencarian teks berdasarkan nama tanaman atau nama senyawa, serta menyediakan filter berdasarkan golongan senyawa fitokimia (alkaloid, flavonoid, terpenoid, fenol, dll.), dan menampilkan **Klausul Herbal** yang menegaskan bahwa informasi ini bukan pengganti Obat Anti Tuberkulosis (OAT) resmi secara prominan di bagian atas halaman.
+* **Gherkin (BDD):**
+```gherkin
+Skenario: Pengguna diarahkan ke modul Edukasi Fitokimia setelah hasil skrining negatif
+  Given Mesin inferensi AI telah menetapkan screening_status sebagai "Tidak Terkena TBC"
+  And Pengguna berada di halaman hasil skrining
+  When Pengguna menekan tombol "Lihat Edukasi Pencegahan Herbal"
+  Then Sistem harus membuka halaman Ensiklopedia Fitokimia Herbal
+  And Sistem harus menampilkan Klausul Herbal "Informasi ini bukan pengganti OAT resmi" secara prominan di bagian atas
+  And Sistem harus menampilkan daftar tanaman herbal terkurasi
+
+Skenario: Pengguna menelusuri detail tanaman herbal di ensiklopedia
+  Given Pengguna berada di halaman Ensiklopedia Fitokimia Herbal
+  When Pengguna memilih entri tanaman "Kunyit"
+  Then Sistem harus menampilkan nama ilmiah "Curcuma longa"
+  And Sistem harus menampilkan senyawa fitokimia aktif "Kurkumin" beserta golongan senyawa "Polifenol"
+  And Sistem harus menampilkan deskripsi mekanisme aksi antimikroba kurkumin terhadap Mycobacterium tuberculosis
+  And Sistem harus menampilkan minimal 1 referensi ilmiah valid (nama jurnal, tahun, DOI) untuk setiap klaim fitokimia
+
+Skenario: Pengguna mencari tanaman herbal menggunakan fitur pencarian
+  Given Pengguna berada di halaman Ensiklopedia Fitokimia Herbal
+  When Pengguna mengetikkan "Bawang Putih" pada kolom pencarian
+  Then Sistem harus menampilkan hasil pencarian yang mengandung entri "Allium sativum"
+  And Sistem harus menampilkan senyawa aktif "Allicin" beserta mekanisme imunomodulatornya
+
+Skenario: Pengguna memfilter tanaman berdasarkan golongan senyawa
+  Given Pengguna berada di halaman Ensiklopedia Fitokimia Herbal
+  When Pengguna memilih filter golongan senyawa "Flavonoid"
+  Then Sistem harus menampilkan hanya tanaman yang mengandung senyawa golongan flavonoid
+  And Sistem harus menyembunyikan entri tanaman yang tidak mengandung senyawa golongan flavonoid
 ```
 
 ---
@@ -329,3 +433,7 @@ Dataset minimum yang dibutuhkan untuk melatih model sebelum kuantisasi:
   * **Alur Utama:** Pengguna membuka simulator -> input parameter simulasi (laju vaksinasi/durasi infeksi) -> sistem merender visualisasi sebaran kompartemen populasi secara virtual dan interaktif.
 * **Kasus Penggunaan 3: Telemonitoring Pasien (Dokter)**
   * **Alur Utama:** Dokter membuka dashboard -> memilih nama pasien -> sistem merender grafik AI Probability Trend dan Questionnaire Trend pasien tanpa menampilkan label status SVIR individu.
+* **Kasus Penggunaan 4: Alur Skrining Lengkap → Edukasi Fitokimia / Telemedicine (Pasien)**
+  * **Alur Utama:** Pengguna menekan menu **"Skrining TBC"** → Sistem menampilkan onboarding skrining beserta panduan 3 langkah dan disclaimer ringkas **(FR-011)** → Pengguna mengisi 10 pertanyaan klinis WHO + usia **(FR-003)** → Pengguna menekan "Mulai Rekam Batuk", sistem merekam audio WAV 5 detik **(FR-001)** → Sistem mengekstrak MFCC native secara otomatis **(FR-002)** → Mesin inferensi LSTM TFLite offline menghasilkan prediksi biner **(FR-004)** →
+    * **Cabang IYA** (`Terkena TBC`, skor ≥ 0.50): Sistem menampilkan tombol **"Temukan Dokter Terdekat"** → Backend PostGIS mengembalikan daftar dokter paru terdekat ≤ 50 km **(FR-006)** → Pengguna memilih dokter → Sistem meminta persetujuan PDP Consent **(FR-005)** → Sesi chat telemedicine WebSocket aktif.
+    * **Cabang TIDAK** (`Tidak Terkena TBC`, skor < 0.50): Sistem menampilkan tombol **"Lihat Edukasi Pencegahan Herbal"** → Pengguna diarahkan ke Ensiklopedia Fitokimia Herbal **(FR-012)** → Pengguna dapat menjelajah tanaman herbal, detail senyawa fitokimia aktif, mekanisme aksi, dan referensi ilmiah pencegahan TBC.

@@ -2,17 +2,41 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../../core/config/env_config.dart';
+import '../../../../core/storage/secure_storage_service.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/snackbar_utils.dart';
 import '../../../profile/presentation/providers/profile_provider.dart';
+import '../../../education/presentation/pages/education_list_page.dart';
 import '../widgets/dashboard_section_header.dart';
 import '../widgets/metric_card.dart';
 import '../widgets/quick_action_card.dart';
 
-class HomePage extends StatelessWidget {
+import '../providers/dashboard_provider.dart';
+import '../providers/care_provider.dart';
+import '../widgets/medication_schedule_card.dart';
+import '../../../notification/presentation/providers/notification_provider.dart';
+import '../../../notification/presentation/pages/notifikasi_page.dart';
+import 'hospital_list_page.dart';
+
+class HomePage extends StatefulWidget {
   final VoidCallback onStartScreeningTap;
 
   const HomePage({super.key, required this.onStartScreeningTap});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<DashboardProvider>(context, listen: false).fetchDashboard();
+      Provider.of<CareProvider>(context, listen: false).loadCareData();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +57,10 @@ class HomePage extends StatelessWidget {
 
               // Welcome/Greeting Banner
               _buildGreetingBanner(profileProvider.fullName.split(' ').first),
+              const SizedBox(height: 24),
+
+              // Medication Schedule Card
+              const MedicationScheduleCard(),
               const SizedBox(height: 24),
 
               // Activity Recaps Header
@@ -139,100 +167,89 @@ class HomePage extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            // Styled premium avatar
-            Container(
-              width: 44,
-              height: 44,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [Color(0xFF1E2D3D), Color(0xFF3D6285)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+        Expanded(
+          child: Row(
+            children: [
+              // Styled premium avatar
+              Container(
+                width: 44,
+                height: 44,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF1E2D3D), Color(0xFF3D6285)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: _buildAvatarImage(profileProvider.profilePicturePath),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Halo,',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    Text(
+                      profileProvider.fullName.isNotEmpty
+                          ? profileProvider.fullName
+                          : 'Pengguna',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.labelLarge.copyWith(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              child: profileProvider.profilePicturePath != null && profileProvider.profilePicturePath!.isNotEmpty
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(22),
-                      child: Image.file(
-                        File(profileProvider.profilePicturePath!),
-                        width: 44,
-                        height: 44,
-                        fit: BoxFit.cover,
-                      ),
-                    )
-                  : const Icon(
-                      Icons.person_rounded,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Halo,',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                Text(
-                  profileProvider.fullName,
-                  style: AppTextStyles.labelLarge.copyWith(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
-        Row(
-          children: [
-            // Search Button
-            _buildIconButton(
-              icon: Icons.search_rounded,
-              onTap: () {
-                SnackBarUtils.showInfo(
-                  context,
-                  'Fitur pencarian belum tersedia.',
-                );
-              },
-            ),
-            const SizedBox(width: 12),
-            // Notification Button with badge
-            Stack(
+        const SizedBox(width: 12),
+        Consumer<NotificationProvider>(
+          builder: (context, notificationProvider, _) {
+            final unreadCount = notificationProvider.unreadCount;
+            return Stack(
               clipBehavior: Clip.none,
               children: [
                 _buildIconButton(
                   icon: Icons.notifications_none_rounded,
                   onTap: () {
-                    SnackBarUtils.showInfo(
+                    Navigator.push(
                       context,
-                      'Tidak ada notifikasi baru.',
-                    );
+                      MaterialPageRoute(
+                        builder: (context) => const NotifikasiPage(),
+                      ),
+                    ).then((_) {
+                      notificationProvider.fetchNotifications();
+                    });
                   },
                 ),
-                Positioned(
-                  top: 10,
-                  right: 10,
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFEA4335), // Red badge
-                      shape: BoxShape.circle,
+                if (unreadCount > 0)
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFEA4335), // Red badge
+                        shape: BoxShape.circle,
+                      ),
                     ),
                   ),
-                ),
               ],
-            ),
-          ],
+            );
+          },
         ),
       ],
     );
@@ -284,12 +301,16 @@ class HomePage extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text(
-                'Selamat pagi, $firstName!',
-                style: AppTextStyles.labelLarge.copyWith(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
+              Expanded(
+                child: Text(
+                  'Selamat pagi, $firstName!',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.labelLarge.copyWith(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
               ),
               const SizedBox(width: 6),
@@ -461,7 +482,7 @@ class HomePage extends StatelessWidget {
           badgeText: 'AKTIF',
           badgeTextColor: AppColors.primary,
           badgeBackgroundColor: Colors.white,
-          onTap: onStartScreeningTap,
+          onTap: widget.onStartScreeningTap,
         ),
         const SizedBox(height: 12),
 
@@ -481,9 +502,11 @@ class HomePage extends StatelessWidget {
                 cardBackgroundColor: AppColors.successLight,
                 isVertical: true,
                 onTap: () {
-                  SnackBarUtils.showInfo(
+                  Navigator.push(
                     context,
-                    'Halaman Akademi belum tersedia.',
+                    MaterialPageRoute(
+                      builder: (_) => const EducationListPage(),
+                    ),
                   );
                 },
               ),
@@ -510,6 +533,28 @@ class HomePage extends StatelessWidget {
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 12),
+
+        // 3. Rumah Sakit Mitra (Full Width)
+        QuickActionCard(
+          title: 'Rumah Sakit Mitra',
+          subtitle: 'Cari & temukan faskes rujukan terdekat',
+          icon: const Icon(
+            Icons.local_hospital_rounded,
+            color: Colors.white,
+            size: 22,
+          ),
+          iconBackgroundColor: AppColors.secondary,
+          cardBackgroundColor: AppColors.secondaryLight,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const HospitalListPage(),
+              ),
+            );
+          },
         ),
       ],
     );
@@ -598,9 +643,11 @@ class HomePage extends StatelessWidget {
           // Continue learning button (Dark Blue)
           ElevatedButton(
             onPressed: () {
-              SnackBarUtils.showInfo(
+              Navigator.push(
                 context,
-                'Fitur edukasi akan segera hadir.',
+                MaterialPageRoute(
+                  builder: (_) => const EducationListPage(),
+                ),
               );
             },
             style: ElevatedButton.styleFrom(
@@ -673,4 +720,72 @@ class _HealthScorePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+Widget _buildAvatarImage(String? path) {
+  const defaultIcon = Icon(
+    Icons.person_rounded,
+    color: Colors.white,
+    size: 24,
+  );
+
+  if (path == null || path.isEmpty) {
+    return defaultIcon;
+  }
+
+  if (File(path).existsSync()) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: Image.file(
+        File(path),
+        width: 44,
+        height: 44,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => defaultIcon,
+      ),
+    );
+  }
+
+  final String fullUrl = (path.startsWith('http://') || path.startsWith('https://'))
+      ? path
+      : (path.startsWith('/') ? '${EnvConfig.apiBaseUrl}$path' : '');
+
+  if (fullUrl.isNotEmpty) {
+    final bool isInternalApi = fullUrl.startsWith(EnvConfig.apiBaseUrl);
+
+    if (isInternalApi) {
+      return FutureBuilder<String?>(
+        future: SecureStorageService().getAccessToken(),
+        builder: (context, snapshot) {
+          final token = snapshot.data;
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: Image.network(
+              fullUrl,
+              headers: (token != null && token.isNotEmpty)
+                  ? {'Authorization': 'Bearer $token'}
+                  : null,
+              width: 44,
+              height: 44,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => defaultIcon,
+            ),
+          );
+        },
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: Image.network(
+        fullUrl,
+        width: 44,
+        height: 44,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => defaultIcon,
+      ),
+    );
+  }
+
+  return defaultIcon;
 }

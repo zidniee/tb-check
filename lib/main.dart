@@ -1,30 +1,66 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide ChangeNotifierProvider;
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
-import 'feature/auth/presentation/pages/login_page.dart';
+import 'core/ai/tflite_service.dart';
 import 'feature/auth/presentation/providers/auth_provider.dart';
 import 'feature/profile/presentation/providers/profile_provider.dart';
+import 'feature/education/presentation/providers/education_provider.dart';
+import 'feature/education/data/repositories/education_repository_impl.dart';
 
-void main() {
-  runApp(const MyApp());
+import 'feature/patient/presentation/providers/dashboard_provider.dart';
+import 'feature/patient/presentation/providers/hospital_provider.dart';
+import 'feature/doctor/presentation/providers/doctor_dashboard_provider.dart';
+import 'feature/notification/presentation/providers/notification_provider.dart';
+import 'feature/patient/presentation/providers/care_provider.dart';
+import 'feature/splash/presentation/splash_page.dart';
+
+@pragma('vm:entry-point')
+Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+}
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
+  
+  // Pre-load the local TFLite LSTM model to ensure instant inference
+  final tfliteService = TfliteService();
+  await tfliteService.loadModel();
+
+  runApp(const ProviderScope(child: MyApp()));
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ProfileProvider()),
+        ChangeNotifierProvider(create: (_) => DashboardProvider()),
+        ChangeNotifierProvider(create: (_) => HospitalProvider()),
+        ChangeNotifierProvider(create: (_) => DoctorDashboardProvider()),
+        ChangeNotifierProvider(create: (_) => NotificationProvider()),
+        ChangeNotifierProvider(create: (_) => CareProvider()),
+        ChangeNotifierProvider(
+          create: (_) => EducationProvider(
+            repository: EducationRepositoryImpl(),
+          ),
+        ),
       ],
       child: MaterialApp(
         title: 'TB Check',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
-        home: const LoginPage(),
+        home: const SplashPage(),
       ),
     );
   }

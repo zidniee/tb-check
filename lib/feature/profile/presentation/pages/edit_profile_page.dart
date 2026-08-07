@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
+import 'whatsapp_profile_cropper_page.dart';
 
+import '../../../../core/config/env_config.dart';
+import '../../../../core/storage/secure_storage_service.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/snackbar_utils.dart';
 import '../../../../shared/widgets/custom_button.dart';
@@ -24,6 +27,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   final _formKey = GlobalKey<FormState>();
 
   late TextEditingController _fullNameController;
+  late TextEditingController _emailController;
   late TextEditingController _phoneController;
   
   // Patient-specific controllers
@@ -48,6 +52,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
 
     _fullNameController = TextEditingController(text: isDoctor ? profile.doctorName : profile.fullName);
+    _emailController = TextEditingController(text: profile.email);
     _phoneController = TextEditingController(text: isDoctor ? profile.doctorPhone : profile.phone);
     
     // Patient values
@@ -68,6 +73,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   @override
   void dispose() {
     _fullNameController.dispose();
+    _emailController.dispose();
     _phoneController.dispose();
     _birthDateController.dispose();
     _addressController.dispose();
@@ -79,7 +85,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   Future<void> _selectBirthDate(BuildContext context) async {
-    DateTime initialDate = DateTime.parse(_birthDateController.text);
+    DateTime initialDate = DateTime.tryParse(_birthDateController.text) ?? DateTime(1995, 6, 15);
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: initialDate,
@@ -205,21 +211,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                 end: Alignment.bottomRight,
                               ),
                             ),
-                            child: _selectedImagePath != null && _selectedImagePath!.isNotEmpty
-                                ? ClipRRect(
-                                    borderRadius: BorderRadius.circular(50),
-                                    child: Image.file(
-                                      File(_selectedImagePath!),
-                                      width: 100,
-                                      height: 100,
-                                      fit: BoxFit.cover,
-                                    ),
-                                  )
-                                : Icon(
-                                    isDoctor ? Icons.medical_services_rounded : Icons.person_rounded,
-                                    color: Colors.white,
-                                    size: 56,
-                                  ),
+                            child: _buildAvatarImage(_selectedImagePath, isDoctor),
                           ),
                           Positioned(
                             right: 0,
@@ -258,6 +250,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
                       ),
                       const SizedBox(height: 20),
                       CustomTextField(
+                        label: 'Email',
+                        hintText: 'Email Anda',
+                        controller: _emailController,
+                        prefixIcon: Icons.email_outlined,
+                        readOnly: true,
+                      ),
+                      const SizedBox(height: 20),
+                      CustomTextField(
                         label: 'Nomor Telepon',
                         hintText: 'Contoh: 08129876543',
                         controller: _phoneController,
@@ -292,6 +292,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         controller: _fullNameController,
                         prefixIcon: Icons.person_outline_rounded,
                         validator: _validateName,
+                      ),
+                      const SizedBox(height: 20),
+                      CustomTextField(
+                        label: 'Email',
+                        hintText: 'Email Anda',
+                        controller: _emailController,
+                        prefixIcon: Icons.email_outlined,
+                        readOnly: true,
                       ),
                       const SizedBox(height: 20),
                       ProfileDropdownField(
@@ -432,6 +440,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         if (success) {
                           SnackBarUtils.showSuccess(context, 'Profil berhasil diperbarui');
                           Navigator.of(context).pop();
+                        } else if (profileProvider.errorMessage != null) {
+                          SnackBarUtils.showError(context, profileProvider.errorMessage!);
                         }
                       }
                     },
@@ -526,41 +536,100 @@ class _EditProfilePageState extends State<EditProfilePage> {
   Future<void> _pickAndCompressImage(ImageSource source) async {
     try {
       final ImagePicker picker = ImagePicker();
-      // pickImage naturally restricts the system selection dialog to image formats only.
       final XFile? pickedFile = await picker.pickImage(
         source: source,
-        maxWidth: 800,
-        maxHeight: 800,
-        imageQuality: 70, // Native image compression
+        maxWidth: 2048,
+        maxHeight: 2048,
+        imageQuality: 95,
       );
 
-      if (pickedFile != null) {
-        // Validate file extension to be absolutely sure it is an image of type JPG or PNG
-        final path = pickedFile.path.toLowerCase();
-        final isImage = path.endsWith('.jpg') ||
-            path.endsWith('.jpeg') ||
-            path.endsWith('.png');
+      if (pickedFile != null && mounted) {
+        final String? croppedPath = await Navigator.of(context).push<String>(
+          MaterialPageRoute(
+            builder: (_) => WhatsAppProfileCropperPage(
+              imagePath: pickedFile.path,
+            ),
+          ),
+        );
 
-        if (!isImage) {
-          if (mounted) {
-            SnackBarUtils.showError(context, 'Hanya file gambar JPG atau PNG yang diperbolehkan!');
-          }
-          return;
+        if (croppedPath != null && mounted) {
+          setState(() {
+            _selectedImagePath = croppedPath;
+          });
         }
-
-        // Get file size to confirm compression
-        final file = File(pickedFile.path);
-        final sizeInKb = await file.length() / 1024;
-        debugPrint('Image compressed successfully. Size: ${sizeInKb.toStringAsFixed(2)} KB');
-
-        setState(() {
-          _selectedImagePath = pickedFile.path;
-        });
       }
     } catch (e) {
       if (mounted) {
         SnackBarUtils.showError(context, 'Gagal mengambil gambar: $e');
       }
     }
+  }
+
+  Widget _buildAvatarImage(String? path, bool isDoctor) {
+    final defaultIcon = Icon(
+      isDoctor ? Icons.medical_services_rounded : Icons.person_rounded,
+      color: Colors.white,
+      size: 56,
+    );
+
+    if (path == null || path.isEmpty) {
+      return defaultIcon;
+    }
+
+    if (File(path).existsSync()) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(50),
+        child: Image.file(
+          File(path),
+          width: 100,
+          height: 100,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => defaultIcon,
+        ),
+      );
+    }
+
+    final String fullUrl = (path.startsWith('http://') || path.startsWith('https://'))
+        ? path
+        : (path.startsWith('/') ? '${EnvConfig.apiBaseUrl}$path' : '');
+
+    if (fullUrl.isNotEmpty) {
+      final bool isInternalApi = fullUrl.startsWith(EnvConfig.apiBaseUrl);
+
+      if (isInternalApi) {
+        return FutureBuilder<String?>(
+          future: SecureStorageService().getAccessToken(),
+          builder: (context, snapshot) {
+            final token = snapshot.data;
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(50),
+              child: Image.network(
+                fullUrl,
+                headers: (token != null && token.isNotEmpty)
+                    ? {'Authorization': 'Bearer $token'}
+                    : null,
+                width: 100,
+                height: 100,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => defaultIcon,
+              ),
+            );
+          },
+        );
+      }
+
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(50),
+        child: Image.network(
+          fullUrl,
+          width: 100,
+          height: 100,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => defaultIcon,
+        ),
+      );
+    }
+
+    return defaultIcon;
   }
 }

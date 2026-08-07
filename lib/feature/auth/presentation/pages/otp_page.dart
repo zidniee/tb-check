@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/snackbar_utils.dart';
 import '../../../../shared/widgets/custom_button.dart';
+import '../providers/auth_provider.dart';
 
 class OtpPage extends StatefulWidget {
   final String email;
@@ -19,12 +21,12 @@ class OtpPage extends StatefulWidget {
 }
 
 class _OtpPageState extends State<OtpPage> {
-  final List<TextEditingController> _controllers = List.generate(4, (_) => TextEditingController());
-  final List<FocusNode> _focusNodes = List.generate(4, (_) => FocusNode());
+  static const int _otpLength = 6;
+  final List<TextEditingController> _controllers = List.generate(_otpLength, (_) => TextEditingController());
+  final List<FocusNode> _focusNodes = List.generate(_otpLength, (_) => FocusNode());
   
   int _secondsRemaining = 59;
   Timer? _timer;
-  bool _isVerifying = false;
   String? _errorMessage;
 
   @override
@@ -59,52 +61,58 @@ class _OtpPageState extends State<OtpPage> {
     });
   }
 
-  void _resendCode() {
+  void _resendCode() async {
     if (_secondsRemaining == 0) {
-      setState(() {
-        _errorMessage = null;
-        _startTimer();
-      });
-      SnackBarUtils.showInfo(context, 'OTP code resent to ${widget.email}');
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final success = await authProvider.resendOTP();
+      if (success) {
+        setState(() {
+          _errorMessage = null;
+          _startTimer();
+        });
+        if (mounted) {
+          SnackBarUtils.showInfo(context, 'Kode OTP baru berhasil dikirim ke ${widget.email}');
+        }
+      } else {
+        setState(() {
+          _errorMessage = authProvider.loginError ?? 'Gagal mengirim ulang OTP';
+        });
+      }
     }
   }
 
   void _verifyCode() async {
     final code = _controllers.map((c) => c.text).join();
-    if (code.length < 4) {
+    if (code.length < _otpLength) {
       setState(() {
-        _errorMessage = 'Please enter all 4 digits';
+        _errorMessage = 'Masukkan semua $_otpLength digit kode OTP';
       });
       return;
     }
 
     setState(() {
-      _isVerifying = true;
       _errorMessage = null;
     });
 
-    // Simulate verification delay
-    await Future.delayed(const Duration(seconds: 1));
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final success = await authProvider.verifyOTP(code);
 
     if (!mounted) return;
 
-    setState(() {
-      _isVerifying = false;
-    });
-
-    if (code == '1234') {
-      SnackBarUtils.showSuccess(context, 'Verification Successful!');
-      // Simulating returning successfully to main app entry/dashboard
+    if (success) {
+      SnackBarUtils.showSuccess(context, 'Verifikasi Email Berhasil!');
       Navigator.of(context).popUntil((route) => route.isFirst);
     } else {
       setState(() {
-        _errorMessage = 'Invalid OTP code. Try entering 1234';
+        _errorMessage = authProvider.loginError ?? authProvider.signUpError ?? 'Kode OTP salah atau kadaluarsa';
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context);
+
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
@@ -121,11 +129,10 @@ class _OtpPageState extends State<OtpPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 40),
+              const SizedBox(height: 20),
               
-              // Title "Enter OTP"
               Text(
-                'Enter OTP',
+                'Verifikasi OTP',
                 style: AppTextStyles.headingSubtitle.copyWith(
                   fontSize: 28,
                   color: AppColors.textPrimary,
@@ -133,11 +140,10 @@ class _OtpPageState extends State<OtpPage> {
               ),
               const SizedBox(height: 16),
               
-              // Subtitle
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: Text(
-                  "We've sent an OTP code to your email,\n${widget.email}",
+                  "Kami telah mengirimkan 6 digit kode OTP ke email Anda:\n${widget.email}",
                   textAlign: TextAlign.center,
                   style: AppTextStyles.bodyMedium.copyWith(
                     color: AppColors.textSecondary,
@@ -145,81 +151,68 @@ class _OtpPageState extends State<OtpPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 48),
+              const SizedBox(height: 36),
 
-              // 4-Digit OTP Boxes
+              // 6-Digit OTP Boxes
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: List.generate(4, (index) {
+                children: List.generate(_otpLength, (index) {
                   return SizedBox(
-                    width: 64,
-                    height: 64,
-                    child: KeyboardListener(
-                      focusNode: FocusNode(), // Dummy focus node for key interception
-                      onKeyEvent: (event) {
-                        // Handle backspace when text field is empty to move backward
-                        if (event is KeyDownEvent && 
-                            event.logicalKey == LogicalKeyboardKey.backspace && 
-                            _controllers[index].text.isEmpty && 
-                            index > 0) {
-                          _focusNodes[index - 1].requestFocus();
+                    width: 44,
+                    height: 54,
+                    child: TextFormField(
+                      controller: _controllers[index],
+                      focusNode: _focusNodes[index],
+                      textAlign: TextAlign.center,
+                      keyboardType: TextInputType.number,
+                      style: AppTextStyles.headingSubtitle.copyWith(
+                        fontSize: 20,
+                        color: AppColors.textPrimary,
+                      ),
+                      inputFormatters: [
+                        LengthLimitingTextInputFormatter(1),
+                        FilteringTextInputFormatter.digitsOnly,
+                      ],
+                      decoration: InputDecoration(
+                        counterText: '',
+                        contentPadding: EdgeInsets.zero,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: AppColors.border, width: 1.5),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: AppColors.primary, width: 2.0),
+                        ),
+                        fillColor: AppColors.background,
+                        filled: true,
+                      ),
+                      onChanged: (value) {
+                        if (value.isNotEmpty) {
+                          if (index < _otpLength - 1) {
+                            _focusNodes[index + 1].requestFocus();
+                          } else {
+                            _focusNodes[index].unfocus();
+                          }
+                        } else {
+                          if (index > 0) {
+                            _focusNodes[index - 1].requestFocus();
+                          }
                         }
                       },
-                      child: TextFormField(
-                        controller: _controllers[index],
-                        focusNode: _focusNodes[index],
-                        textAlign: TextAlign.center,
-                        keyboardType: TextInputType.number,
-                        style: AppTextStyles.headingSubtitle.copyWith(
-                          fontSize: 24,
-                          color: AppColors.textPrimary,
-                        ),
-                        inputFormatters: [
-                          LengthLimitingTextInputFormatter(1),
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                        decoration: InputDecoration(
-                          counterText: '',
-                          contentPadding: EdgeInsets.zero,
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: AppColors.border, width: 1.5),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: AppColors.primary, width: 2.0),
-                          ),
-                          fillColor: AppColors.background,
-                          filled: true,
-                        ),
-                        onChanged: (value) {
-                          if (value.isNotEmpty) {
-                            if (index < 3) {
-                              _focusNodes[index + 1].requestFocus();
-                            } else {
-                              _focusNodes[index].unfocus();
-                            }
-                          } else {
-                            if (index > 0) {
-                              _focusNodes[index - 1].requestFocus();
-                            }
-                          }
-                        },
-                      ),
                     ),
                   );
                 }),
               ),
               const SizedBox(height: 32),
 
-              // Resend Timer Row
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
                     _secondsRemaining > 0 
-                      ? "We will resend the code in "
-                      : "Didn't receive the code? ",
+                      ? "Kirim ulang kode dalam "
+                      : "Belum menerima kode? ",
                     style: AppTextStyles.bodyMedium.copyWith(
                       color: AppColors.textSecondary,
                     ),
@@ -228,8 +221,8 @@ class _OtpPageState extends State<OtpPage> {
                     onTap: _secondsRemaining == 0 ? _resendCode : null,
                     child: Text(
                       _secondsRemaining > 0
-                        ? "${_secondsRemaining} s"
-                        : "Resend Code",
+                        ? "$_secondsRemaining detik"
+                        : "Kirim Ulang",
                       style: AppTextStyles.bodyMedium.copyWith(
                         fontWeight: FontWeight.bold,
                         color: AppColors.primary,
@@ -239,7 +232,6 @@ class _OtpPageState extends State<OtpPage> {
                 ],
               ),
               
-              // Error Message
               if (_errorMessage != null) ...[
                 const SizedBox(height: 24),
                 Text(
@@ -252,33 +244,30 @@ class _OtpPageState extends State<OtpPage> {
                 ),
               ],
               
-              const SizedBox(height: 48),
+              const SizedBox(height: 36),
 
-              // Verify Button
               CustomButton(
-                text: 'Verify',
-                isLoading: _isVerifying,
+                text: 'Verifikasi',
+                isLoading: authProvider.isLoading,
                 onPressed: _verifyCode,
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
 
-              // Redirect back to Login
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    "Already have an Account! ",
+                    "Sudah Punya Akun? ",
                     style: AppTextStyles.bodyMedium.copyWith(
                       color: AppColors.textSecondary,
                     ),
                   ),
                   GestureDetector(
                     onTap: () {
-                      // Navigate back to Login (pop until the login/root screen)
                       Navigator.of(context).popUntil((route) => route.isFirst);
                     },
                     child: Text(
-                      'Login',
+                      'Masuk',
                       style: AppTextStyles.bodyMedium.copyWith(
                         fontWeight: FontWeight.bold,
                         color: AppColors.primary,
