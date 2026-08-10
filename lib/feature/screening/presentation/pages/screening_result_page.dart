@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../patient/presentation/pages/hospital_list_page.dart';
 import '../../domain/entities/screening_result.dart';
-import '../../../education/presentation/pages/education_list_page.dart';
+import '../../../patient/presentation/pages/main_navigation_page.dart';
+import '../../../patient/presentation/providers/dashboard_provider.dart';
 
 class ScreeningResultPage extends StatelessWidget {
   final ScreeningResult result;
@@ -64,17 +66,21 @@ class ScreeningResultPage extends StatelessWidget {
                   children: [
                     // Circular Gauge / Progress
                     SizedBox(
-                      width: 140,
-                      height: 140,
+                      width: 160,
+                      height: 160,
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
-                          CircularProgressIndicator(
-                            value: result.probabilityScore,
-                            strokeWidth: 10,
-                            backgroundColor: AppColors.border.withOpacity(0.5),
-                            valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
-                            strokeCap: StrokeCap.round,
+                          SizedBox(
+                            width: 150,
+                            height: 150,
+                            child: CircularProgressIndicator(
+                              value: result.probabilityScore,
+                              strokeWidth: 8,
+                              backgroundColor: AppColors.border.withOpacity(0.5),
+                              valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                              strokeCap: StrokeCap.round,
+                            ),
                           ),
                           Column(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -82,11 +88,12 @@ class ScreeningResultPage extends StatelessWidget {
                               Text(
                                 result.probabilityPercentage,
                                 style: AppTextStyles.h5.copyWith(
-                                  fontSize: 32,
+                                  fontSize: 28,
                                   fontWeight: FontWeight.bold,
                                   color: AppColors.textPrimary,
                                 ),
                               ),
+                              const SizedBox(height: 2),
                               Text(
                                 'Probabilitas',
                                 style: AppTextStyles.bodySmall.copyWith(
@@ -241,12 +248,9 @@ class ScreeningResultPage extends StatelessWidget {
               if (!isPositive) ...[
                 ElevatedButton.icon(
                   onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const EducationListPage(),
-                      ),
-                    );
+                    Provider.of<DashboardProvider>(context, listen: false).fetchDashboard();
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                    context.findAncestorStateOfType<MainNavigationPageState>()?.onTabSelected(2);
                   },
                   icon: const Icon(Icons.local_florist_rounded, size: 20, color: Colors.white),
                   label: const Text('Lihat Edukasi Pencegahan Herbal'),
@@ -283,7 +287,10 @@ class ScreeningResultPage extends StatelessWidget {
                 const SizedBox(height: 12),
               ],
               OutlinedButton(
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () {
+                  Provider.of<DashboardProvider>(context, listen: false).fetchDashboard();
+                  Navigator.of(context).pop();
+                },
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: AppColors.primary),
                   padding: const EdgeInsets.symmetric(vertical: 16),
@@ -305,20 +312,31 @@ class ScreeningResultPage extends StatelessWidget {
 
   Widget _buildMetaRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6.0),
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary, fontSize: 13),
+          Expanded(
+            flex: 5,
+            child: Text(
+              label,
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+              ),
+            ),
           ),
-          Text(
-            value,
-            style: AppTextStyles.labelMedium.copyWith(
-              color: AppColors.textPrimary,
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 6,
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: AppTextStyles.labelMedium.copyWith(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ],

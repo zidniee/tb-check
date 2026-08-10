@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -31,9 +32,20 @@ class FCMService {
 
       // 2. Initialize local notifications for foreground display
       await LocalNotificationService.initialize(
-        onTap: (payload) {
-          if (payload != null && context.mounted) {
-            NotificationRouter.navigate(context, payload);
+        onTap: (payloadStr) {
+          if (payloadStr != null && context.mounted) {
+            try {
+              final Map<String, dynamic> data = jsonDecode(payloadStr);
+              NotificationRouter.navigate(
+                context,
+                data['notification_type'] ?? 'general',
+                relatedId: data['related_id'],
+                actionType: data['action_type'],
+                actionValue: data['action_value'],
+              );
+            } catch (e) {
+              NotificationRouter.navigate(context, payloadStr);
+            }
           }
         },
       );
@@ -55,12 +67,19 @@ class FCMService {
         developer.log('FCM Foreground Message: ${message.notification?.title}');
         final notification = message.notification;
         if (notification != null) {
-          // Show local heads-up notification
+          // Show local heads-up notification using summary if available
+          final summary = message.data['summary'];
+          final payloadData = {
+            'notification_type': message.data['notification_type'],
+            'related_id': message.data['related_id'] ?? message.data['notification_id'] ?? message.data['id'],
+            'action_type': message.data['action_type'],
+            'action_value': message.data['action_value'],
+          };
           LocalNotificationService.show(
             id: message.hashCode,
             title: notification.title ?? '',
-            body: notification.body ?? '',
-            payload: message.data['notification_type'] ?? 'general',
+            body: (summary != null && summary.isNotEmpty) ? summary : (notification.body ?? ''),
+            payload: jsonEncode(payloadData),
           );
         }
         // Fetch new notifications count/list in provider

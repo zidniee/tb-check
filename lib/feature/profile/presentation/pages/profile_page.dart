@@ -1,12 +1,17 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' show ProviderScope;
 import '../../../../core/config/env_config.dart';
 import '../../../../core/storage/secure_storage_service.dart';
+import '../../../../core/storage/cache_service.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/snackbar_utils.dart';
 import '../../../auth/presentation/pages/login_page.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../patient/presentation/providers/dashboard_provider.dart';
+import '../../../doctor/presentation/providers/doctor_dashboard_provider.dart';
+import '../../../patient/presentation/providers/care_notifier.dart';
 import '../providers/profile_provider.dart';
 import 'edit_profile_page.dart';
 import 'profile_picture_viewer_page.dart';
@@ -537,6 +542,18 @@ class _ProfilePageState extends State<ProfilePage> {
 
                 await authProvider.logout();
                 profileProvider.clearProfile();
+                
+                // Clear patient and doctor dashboards
+                if (pageContext.mounted) {
+                  Provider.of<DashboardProvider>(pageContext, listen: false).clearDashboard();
+                  Provider.of<DoctorDashboardProvider>(pageContext, listen: false).clearDashboard();
+                  
+                  // Invalidate Riverpod care notifier state
+                  ProviderScope.containerOf(pageContext).invalidate(careNotifierProvider);
+                  
+                  // Clean up all cache service data
+                  await CacheService().clearAllCache();
+                }
 
                 if (pageContext.mounted) {
                   SnackBarUtils.showSuccess(pageContext, 'Berhasil keluar akun.');

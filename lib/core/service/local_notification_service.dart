@@ -42,6 +42,7 @@ class LocalNotificationService {
       importance: Importance.max,
       priority: Priority.high,
       ticker: 'ticker',
+      visibility: NotificationVisibility.public,
     );
     const details = NotificationDetails(android: androidDetails);
     await _plugin.show(id, title, body, details, payload: payload);

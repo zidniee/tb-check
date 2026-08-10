@@ -1,40 +1,56 @@
 class PatientDashboardDTO {
-  final double? latestProbabilityScore;
-  final String? latestPredictionStatus;
-  final String? medicationAdherenceStatus;
-  final int activeConsultationsCount;
-  final int unreadNotificationsCount;
-  final String? lastScreeningDate;
+  final int healthScore;
+  final int healthScoreChange;
+  final List<LungCapacityTrendPoint> lungCapacityTrend;
 
-  PatientDashboardDTO({
-    this.latestProbabilityScore,
-    this.latestPredictionStatus,
-    this.medicationAdherenceStatus,
-    this.activeConsultationsCount = 0,
-    this.unreadNotificationsCount = 0,
-    this.lastScreeningDate,
+  const PatientDashboardDTO({
+    required this.healthScore,
+    required this.healthScoreChange,
+    required this.lungCapacityTrend,
   });
+
+  /// Desimal skor (0.0–1.0) untuk `_HealthScorePainter(score: ...)`.
+  double get scoreFraction => (healthScore / 100).clamp(0.0, 1.0);
+
+  /// `true` jika skor mingguan naik.
+  bool get isScoreUp => healthScoreChange > 0;
+
+  /// `true` jika skor mingguan turun.
+  bool get isScoreDown => healthScoreChange < 0;
 
   factory PatientDashboardDTO.fromJson(Map<String, dynamic> json) {
     return PatientDashboardDTO(
-      latestProbabilityScore: (json['latest_probability_score'] as num?)?.toDouble() ??
-          (json['probability_score'] as num?)?.toDouble(),
-      latestPredictionStatus: (json['latest_prediction_status'] ?? json['prediction_status']) as String?,
-      medicationAdherenceStatus: (json['medication_adherence_status'] ?? json['followup_status']) as String?,
-      activeConsultationsCount: (json['active_consultations_count'] as num?)?.toInt() ?? 0,
-      unreadNotificationsCount: (json['unread_notifications_count'] as num?)?.toInt() ?? 0,
-      lastScreeningDate: (json['last_screening_date'] ?? json['last_screening_at']) as String?,
+      healthScore: (json['health_score'] as num?)?.toInt() ?? 0,
+      healthScoreChange: (json['health_score_change'] as num?)?.toInt() ?? 0,
+      lungCapacityTrend: (json['lung_capacity_trend'] as List<dynamic>? ?? const [])
+          .map((e) => LungCapacityTrendPoint.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'latest_probability_score': latestProbabilityScore,
-      'latest_prediction_status': latestPredictionStatus,
-      'medication_adherence_status': medicationAdherenceStatus,
-      'active_consultations_count': activeConsultationsCount,
-      'unread_notifications_count': unreadNotificationsCount,
-      'last_screening_date': lastScreeningDate,
+      'health_score': healthScore,
+      'health_score_change': healthScoreChange,
+      'lung_capacity_trend': lungCapacityTrend.map((e) => e.toJson()).toList(),
     };
+  }
+}
+
+class LungCapacityTrendPoint {
+  final String day; // "Sen", "Sel", "Rab", ...
+  final int percentage; // 60–95
+
+  const LungCapacityTrendPoint({required this.day, required this.percentage});
+
+  factory LungCapacityTrendPoint.fromJson(Map<String, dynamic> json) {
+    return LungCapacityTrendPoint(
+      day: (json['day'] as String?) ?? '',
+      percentage: (json['percentage'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {'day': day, 'percentage': percentage};
   }
 }

@@ -30,12 +30,14 @@ class _EducationDetailPageState extends State<EducationDetailPage> {
 
   bool _hasScrolledToLastPosition = false;
   int _lastSavedPercent = 0;
+  late EducationProvider _educationProvider;
 
   @override
   void initState() {
     super.initState();
+    _educationProvider = context.read<EducationProvider>();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<EducationProvider>().fetchContentDetail(widget.contentId);
+      _educationProvider.fetchContentDetail(widget.contentId);
     });
     _scrollController.addListener(_onScroll);
   }
@@ -53,9 +55,7 @@ class _EducationDetailPageState extends State<EducationDetailPage> {
     );
   }
 
-  @override
-  void dispose() {
-    // Save final progress on exit if they haven't finished reading yet
+  void _saveProgressOnExit() {
     if (_scrollController.hasClients) {
       final maxScroll = _scrollController.position.maxScrollExtent;
       final currentScroll = _scrollController.position.pixels;
@@ -63,11 +63,11 @@ class _EducationDetailPageState extends State<EducationDetailPage> {
         final progress = (currentScroll / maxScroll).clamp(0.0, 1.0);
         final percent = (progress * 100).round();
 
-        final content = context.read<EducationProvider>().selectedContent;
+        final content = _educationProvider.selectedContent;
         if (content != null && content.isArticle) {
           final existingProgress = content.userProgress;
           if (existingProgress == null || !existingProgress.isCompleted) {
-            context.read<EducationProvider>().updateReadingProgress(
+            _educationProvider.updateReadingProgress(
               content.contentId,
               isCompleted: percent >= 95,
               progressPercent: percent,
@@ -77,7 +77,10 @@ class _EducationDetailPageState extends State<EducationDetailPage> {
         }
       }
     }
+  }
 
+  @override
+  void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _ytController?.close();
@@ -105,13 +108,13 @@ class _EducationDetailPageState extends State<EducationDetailPage> {
   }
 
   void _saveProgressLocally(int percent, int position) {
-    final content = context.read<EducationProvider>().selectedContent;
+    final content = _educationProvider.selectedContent;
     if (content == null || !content.isArticle) return;
 
     final existingProgress = content.userProgress;
     if (existingProgress != null && existingProgress.isCompleted) return;
 
-    context.read<EducationProvider>().updateReadingProgress(
+    _educationProvider.updateReadingProgress(
       content.contentId,
       isCompleted: percent >= 95,
       progressPercent: percent,
@@ -153,13 +156,15 @@ class _EducationDetailPageState extends State<EducationDetailPage> {
           _lastSavedPercent = content.userProgress?.progressPercent ?? 0;
           if (lastPosition > 0) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_scrollController.hasClients) {
-                _scrollController.animateTo(
-                  lastPosition.toDouble(),
-                  duration: const Duration(milliseconds: 600),
-                  curve: Curves.easeOut,
-                );
-              }
+              Future.delayed(const Duration(milliseconds: 250), () {
+                if (mounted && _scrollController.hasClients) {
+                  _scrollController.animateTo(
+                    lastPosition.toDouble(),
+                    duration: const Duration(milliseconds: 600),
+                    curve: Curves.easeOut,
+                  );
+                }
+              });
             });
           }
         }
@@ -305,6 +310,9 @@ class _EducationDetailPageState extends State<EducationDetailPage> {
                   _buildSourceReference(content.sourceUrl!),
                 ],
 
+                // Scientific references list from backend
+                _buildScientificReferencesSection(content.references),
+
                 const SizedBox(height: 100),
               ],
             ),
@@ -337,7 +345,10 @@ class _EducationDetailPageState extends State<EducationDetailPage> {
             color: AppColors.textPrimary,
             size: 20,
           ),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () {
+            _saveProgressOnExit();
+            Navigator.of(context).pop();
+          },
         ),
         title: Text(
           'Video Edukasi',
@@ -473,19 +484,25 @@ class _EducationDetailPageState extends State<EducationDetailPage> {
                   ),
                   const SizedBox(height: 24),
 
+                  // Scientific references list from backend
+                  _buildScientificReferencesSection(content.references),
+
                   // Mark completed button (Placed inline here to prevent bottom overlaps)
                   SizedBox(
                     height: 52,
                     child: ElevatedButton.icon(
                       onPressed: isCompleted
                           ? null
-                          : () {
-                              provider.updateReadingProgress(
+                          : () async {
+                              await provider.updateReadingProgress(
                                 content.contentId,
                                 isCompleted: true,
                                 progressPercent: 100,
                                 lastPosition: 0,
                               );
+                              if (mounted) {
+                                Navigator.of(context).pop();
+                              }
                             },
                       icon: Icon(
                         isCompleted
@@ -538,7 +555,10 @@ class _EducationDetailPageState extends State<EducationDetailPage> {
             color: Colors.white,
             size: 18,
           ),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () {
+            _saveProgressOnExit();
+            Navigator.of(context).pop();
+          },
           padding: EdgeInsets.zero,
         ),
       ),
@@ -764,6 +784,122 @@ class _EducationDetailPageState extends State<EducationDetailPage> {
     );
   }
 
+  Widget _buildScientificReferencesSection(List<ScientificReference> references) {
+    if (references.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 24),
+        Text(
+          'REFERENSI ILMIAH',
+          style: AppTextStyles.labelMedium.copyWith(
+            fontSize: 12,
+            color: AppColors.textSecondary,
+            letterSpacing: 0.8,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 10),
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          itemCount: references.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (context, index) {
+            final ref = references[index];
+            final displayUrl = ref.url ?? (ref.doi != null ? 'https://doi.org/${ref.doi}' : null);
+
+            return InkWell(
+              onTap: displayUrl != null && displayUrl.isNotEmpty
+                  ? () async {
+                      final uri = Uri.parse(displayUrl);
+                      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+                        // ignore: use_build_context_synchronously
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Tidak dapat membuka tautan: $displayUrl')),
+                        );
+                      }
+                    }
+                  : null,
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.border.withOpacity(0.8)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: const BoxDecoration(
+                        color: AppColors.primaryLight,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.science_rounded,
+                        color: AppColors.primary,
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            ref.journalName,
+                            style: AppTextStyles.labelMedium.copyWith(
+                              fontSize: 13,
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Tahun Terbit: ${ref.year}',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          if (ref.doi != null && ref.doi!.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              'DOI: ${ref.doi}',
+                              style: AppTextStyles.bodySmall.copyWith(
+                                fontSize: 11,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    if (displayUrl != null && displayUrl.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      const Icon(
+                        Icons.open_in_new_rounded,
+                        color: AppColors.primary,
+                        size: 16,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
   Widget _buildBottomBar(
     BuildContext context,
     EducationContent content,
@@ -828,8 +964,8 @@ class _EducationDetailPageState extends State<EducationDetailPage> {
               child: ElevatedButton.icon(
                 onPressed: isCompleted
                     ? null
-                    : () {
-                        provider.updateReadingProgress(
+                    : () async {
+                        await provider.updateReadingProgress(
                           content.contentId,
                           isCompleted: true,
                           progressPercent: 100,
@@ -837,6 +973,9 @@ class _EducationDetailPageState extends State<EducationDetailPage> {
                               ? _scrollController.position.pixels.round()
                               : 0,
                         );
+                        if (mounted) {
+                          Navigator.of(context).pop();
+                        }
                       },
                 icon: Icon(
                   isCompleted

@@ -13,11 +13,15 @@ import '../widgets/metric_card.dart';
 import '../widgets/quick_action_card.dart';
 
 import '../providers/dashboard_provider.dart';
+import '../../data/models/patient_dashboard_dto.dart';
 import '../providers/care_provider.dart';
 import '../widgets/medication_schedule_card.dart';
 import '../../../notification/presentation/providers/notification_provider.dart';
 import '../../../notification/presentation/pages/notifikasi_page.dart';
 import 'hospital_list_page.dart';
+import '../../../appointment/presentation/pages/appointment_list_page.dart';
+import '../../../svir/presentation/pages/svir_simulation_page.dart';
+import 'main_navigation_page.dart';
 
 class HomePage extends StatefulWidget {
   final VoidCallback onStartScreeningTap;
@@ -41,6 +45,9 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final profileProvider = Provider.of<ProfileProvider>(context);
+    final dashboardProvider = Provider.of<DashboardProvider>(context);
+    final dashboard = dashboardProvider.dashboardData;
+    final isDashboardLoading = dashboardProvider.isLoading;
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -96,7 +103,7 @@ class _HomePageState extends State<HomePage> {
                             color: AppColors.primary,
                           ),
                         ),
-                        child: _buildHealthScoreWidget(),
+                        child: _buildHealthScoreWidget(dashboard, isDashboardLoading),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -123,7 +130,7 @@ class _HomePageState extends State<HomePage> {
                             color: AppColors.primary,
                           ),
                         ),
-                        child: _buildLungCapacityWidget(),
+                        child: _buildLungCapacityWidget(dashboard, isDashboardLoading),
                       ),
                     ),
                   ],
@@ -135,12 +142,7 @@ class _HomePageState extends State<HomePage> {
               DashboardSectionHeader(
                 title: 'Aksi Cepat',
                 actionText: 'Lihat Semua',
-                onActionTap: () {
-                  SnackBarUtils.showInfo(
-                    context,
-                    'Daftar semua aksi belum tersedia.',
-                  );
-                },
+                onActionTap: () => _showAllQuickActions(context),
               ),
               const SizedBox(height: 12),
 
@@ -148,12 +150,6 @@ class _HomePageState extends State<HomePage> {
               _buildQuickActionsList(context),
               const SizedBox(height: 24),
 
-              // Learning Path Header
-              const DashboardSectionHeader(title: 'Alur Belajar'),
-              const SizedBox(height: 12),
-
-              // Learning Path Card
-              _buildLearningPathCard(context),
               const SizedBox(height: 100), // Unified bottom spacing clearance
             ],
           ),
@@ -364,14 +360,32 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildHealthScoreWidget() {
+  Widget _buildHealthScoreWidget(PatientDashboardDTO? dashboard, bool isLoading) {
+    if (isLoading && dashboard == null) {
+      return const SizedBox(
+        height: 100,
+        child: Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+        ),
+      );
+    }
+
+    final score = dashboard?.healthScore ?? 0;
+    final scoreFraction = (score / 100).clamp(0.0, 1.0);
+    final scoreChange = dashboard?.healthScoreChange ?? 0;
+    final isScoreUp = scoreChange >= 0;
+
     return Column(
       children: [
         SizedBox(
           width: 72,
           height: 72,
           child: CustomPaint(
-            painter: _HealthScorePainter(score: 0.92),
+            painter: _HealthScorePainter(score: scoreFraction),
             child: Center(
               child: Container(
                 width: 50,
@@ -383,7 +397,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 child: Center(
                   child: Text(
-                    '92%',
+                    '$score%',
                     style: AppTextStyles.labelMedium.copyWith(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
@@ -399,16 +413,16 @@ class _HomePageState extends State<HomePage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.arrow_upward_rounded,
-              color: AppColors.success,
+            Icon(
+              isScoreUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+              color: isScoreUp ? AppColors.success : const Color(0xFFEA4335),
               size: 12,
             ),
             const SizedBox(width: 2),
             Text(
-              '3% minggu ini',
+              '${scoreChange.abs()}% minggu ini',
               style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.success,
+                color: isScoreUp ? AppColors.success : const Color(0xFFEA4335),
                 fontWeight: FontWeight.bold,
                 fontSize: 11,
               ),
@@ -419,26 +433,67 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildLungCapacityWidget() {
+  Widget _buildLungCapacityWidget(PatientDashboardDTO? dashboard, bool isLoading) {
+    if (isLoading && dashboard == null) {
+      return const SizedBox(
+        height: 100,
+        child: Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+        ),
+      );
+    }
+
+    final trend = dashboard?.lungCapacityTrend ?? const [];
+
+    if (trend.isEmpty) {
+      return SizedBox(
+        height: 100,
+        child: Center(
+          child: Text(
+            'Tidak ada data',
+            style: AppTextStyles.bodySmall.copyWith(
+              fontSize: 11,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(
-          height: 18,
-        ), // Added top spacing to push the chart down and align it with the circle gauge
-        // Simulated bar charts
+        const SizedBox(height: 18),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            _buildBarItem(height: 16, isSelected: false),
-            _buildBarItem(height: 32, isSelected: false),
-            _buildBarItem(
-              height: 48,
-              isSelected: true,
-            ), // Selected active day (purple/lavender)
-            _buildBarItem(height: 20, isSelected: false),
-          ],
+          children: trend.asMap().entries.map((entry) {
+            final int index = entry.key;
+            final point = entry.value;
+            // Height logic: max height is 48.0, minimum is 8.0
+            final double height = (point.percentage / 100.0 * 48.0).clamp(8.0, 48.0);
+            final bool isSelected = index == trend.length - 1;
+
+            return Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                _buildBarItem(height: height, isSelected: isSelected),
+                const SizedBox(height: 4),
+                Text(
+                  point.day,
+                  style: TextStyle(
+                    fontSize: 8,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    color: isSelected ? AppColors.primary : AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            );
+          }).toList(),
         ),
         const SizedBox(height: 8),
         Center(
@@ -492,7 +547,7 @@ class _HomePageState extends State<HomePage> {
             Expanded(
               child: QuickActionCard(
                 title: 'Akademi',
-                subtitle: 'Modul 4: Herbal',
+                subtitle: 'Edukasi & Pencegahan',
                 icon: const Icon(
                   Icons.school_rounded,
                   color: Colors.white,
@@ -502,22 +557,17 @@ class _HomePageState extends State<HomePage> {
                 cardBackgroundColor: AppColors.successLight,
                 isVertical: true,
                 onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const EducationListPage(),
-                    ),
-                  );
+                  context.findAncestorStateOfType<MainNavigationPageState>()?.onTabSelected(2);
                 },
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: QuickActionCard(
-                title: 'Pustaka Video',
-                subtitle: 'Senam Paru-Paru',
+                title: 'Janji Temu',
+                subtitle: 'Booking Konsultasi',
                 icon: const Icon(
-                  Icons.play_arrow_rounded,
+                  Icons.calendar_today_rounded,
                   color: Colors.white,
                   size: 20,
                 ),
@@ -525,9 +575,11 @@ class _HomePageState extends State<HomePage> {
                 cardBackgroundColor: AppColors.secondaryLight,
                 isVertical: true,
                 onTap: () {
-                  SnackBarUtils.showInfo(
+                  Navigator.push(
                     context,
-                    'Perpustakaan video belum tersedia.',
+                    MaterialPageRoute(
+                      builder: (_) => const AppointmentListPage(),
+                    ),
                   );
                 },
               ),
@@ -536,22 +588,22 @@ class _HomePageState extends State<HomePage> {
         ),
         const SizedBox(height: 12),
 
-        // 3. Rumah Sakit Mitra (Full Width)
+        // 3. Simulasi Penyebaran TBC (Full Width)
         QuickActionCard(
-          title: 'Rumah Sakit Mitra',
-          subtitle: 'Cari & temukan faskes rujukan terdekat',
+          title: 'Simulasi Penyebaran TBC',
+          subtitle: 'Simulasi risiko & laju penularan di populasi',
           icon: const Icon(
-            Icons.local_hospital_rounded,
+            Icons.analytics_rounded,
             color: Colors.white,
             size: 22,
           ),
-          iconBackgroundColor: AppColors.secondary,
-          cardBackgroundColor: AppColors.secondaryLight,
+          iconBackgroundColor: AppColors.primary,
+          cardBackgroundColor: AppColors.primaryLight,
           onTap: () {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => const HospitalListPage(),
+                builder: (_) => const SvirSimulationPage(),
               ),
             );
           },
@@ -560,121 +612,208 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildLearningPathCard(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.border.withOpacity(0.5)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
+  void _showAllQuickActions(BuildContext parentContext) {
+    showModalBottomSheet(
+      context: parentContext,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: AppColors.background,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
+            ),
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Icon Badge
-              Container(
-                width: 44,
-                height: 44,
-                decoration: const BoxDecoration(
-                  color: Color(
-                    0xFF1E2D3D,
-                  ), // Dark blue background matching screenshot
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.menu_book_rounded,
-                  color: Colors.white,
-                  size: 20,
+              // Pull handle indicator
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Dasar Respirasi',
-                          style: AppTextStyles.labelLarge.copyWith(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        Text(
-                          '65%',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    // Linear progress bar
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: const LinearProgressIndicator(
-                        value: 0.65,
-                        minHeight: 6,
-                        backgroundColor: Color(0xFFF1F5F9),
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          AppColors.primary,
-                        ),
-                      ),
-                    ),
-                  ],
+              const SizedBox(height: 20),
+              
+              // Title
+              Text(
+                'Semua Aksi Cepat',
+                style: AppTextStyles.labelLarge.copyWith(
+                  fontSize: 18,
+                  color: AppColors.textPrimary,
                 ),
+              ),
+              const SizedBox(height: 16),
+              
+              // Grid or list of actions
+              // Action 1: Mulai Skrining
+              _buildModalActionItem(
+                sheetContext,
+                title: 'Mulai Skrining',
+                subtitle: 'Cek kesehatan paru Anda dalam 2 menit',
+                icon: Icons.add_box_rounded,
+                color: AppColors.primary,
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  widget.onStartScreeningTap();
+                },
+              ),
+              const SizedBox(height: 12),
+              
+              // Action 2: Akademi Edukasi
+              _buildModalActionItem(
+                sheetContext,
+                title: 'Akademi Edukasi',
+                subtitle: 'Pelajari pencegahan & penyembuhan TBC',
+                icon: Icons.school_rounded,
+                color: AppColors.success,
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  parentContext.findAncestorStateOfType<MainNavigationPageState>()?.onTabSelected(2);
+                },
+              ),
+              const SizedBox(height: 12),
+              
+              // Action 3: Janji Temu
+              _buildModalActionItem(
+                sheetContext,
+                title: 'Janji Temu',
+                subtitle: 'Booking jadwal konsultasi dokter',
+                icon: Icons.calendar_today_rounded,
+                color: AppColors.secondary,
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  Navigator.push(
+                    parentContext,
+                    MaterialPageRoute(
+                      builder: (_) => const AppointmentListPage(),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              
+              // Action 4: Simulasi Epidemiologi
+              _buildModalActionItem(
+                sheetContext,
+                title: 'Simulasi Penyebaran TBC',
+                subtitle: 'Prediksi laju penyebaran & risiko di populasi',
+                icon: Icons.analytics_rounded,
+                color: AppColors.primary,
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  Navigator.push(
+                    parentContext,
+                    MaterialPageRoute(
+                      builder: (_) => const SvirSimulationPage(),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              
+              // Action 5: Rumah Sakit Mitra (Exclusive here!)
+              _buildModalActionItem(
+                sheetContext,
+                title: 'Rumah Sakit Mitra',
+                subtitle: 'Fasilitas kesehatan rujukan terdekat',
+                icon: Icons.local_hospital_rounded,
+                color: AppColors.secondary,
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  Navigator.push(
+                    parentContext,
+                    MaterialPageRoute(
+                      builder: (_) => const HospitalListPage(),
+                    ),
+                  );
+                },
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          // Continue learning button (Dark Blue)
-          ElevatedButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const EducationListPage(),
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor:
-                  AppColors.textPrimary, // Unified slate dark blue accent
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+        );
+      },
+    );
+  }
+
+  Widget _buildModalActionItem(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
               children: [
-                Text(
-                  'Lanjutkan Belajar',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: color, size: 20),
                 ),
-                SizedBox(width: 8),
-                Icon(Icons.arrow_forward_rounded, size: 16),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: AppTextStyles.labelMedium.copyWith(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: AppTextStyles.bodySmall.copyWith(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textSecondary,
+                ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
+
+
 }
 
 class _HealthScorePainter extends CustomPainter {

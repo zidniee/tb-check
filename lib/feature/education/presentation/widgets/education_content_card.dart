@@ -141,6 +141,12 @@ class EducationContentCard extends StatelessWidget {
   }
 
   Widget _buildThumbnail() {
+    final displayImageUrl = (content.thumbnailUrl != null && content.thumbnailUrl!.isNotEmpty)
+        ? content.thumbnailUrl
+        : ((content.imageUrl != null && content.imageUrl!.isNotEmpty)
+            ? content.imageUrl
+            : null);
+
     return Stack(
       children: [
         // Thumbnail image
@@ -150,9 +156,9 @@ class EducationContentCard extends StatelessWidget {
             height: 160,
             width: double.infinity,
             color: AppColors.primaryLight,
-            child: content.thumbnailUrl != null
+            child: displayImageUrl != null
                 ? Image.network(
-                    content.thumbnailUrl!,
+                    displayImageUrl,
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => _buildPlaceholderThumbnail(),
                   )

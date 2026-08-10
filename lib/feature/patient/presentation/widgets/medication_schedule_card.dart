@@ -1,24 +1,68 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../providers/care_provider.dart';
-import '../pages/care_settings_page.dart';
+import '../providers/care_notifier.dart';
 import '../pages/care_dashboard_page.dart';
-import '../../data/models/care_models.dart';
+import '../../domain/entities/care_entities.dart';
 
-class MedicationScheduleCard extends StatelessWidget {
+class MedicationScheduleCard extends ConsumerWidget {
   const MedicationScheduleCard({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final careProvider = Provider.of<CareProvider>(context);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final careState = ref.watch(careNotifierProvider);
 
-    // If there is no active treatment, show call-to-action to setup treatment
-    if (careProvider.treatment == null) {
-      return _buildNoTreatmentCard(context);
-    }
+    return careState.treatment.when(
+      loading: () => const SizedBox(
+        height: 120,
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (err, _) => const SizedBox(),
+      data: (treatment) {
+        if (treatment == null || !treatment.isActive) {
+          return _buildNoTreatmentCard(context);
+        }
 
-    final schedules = careProvider.schedules;
+        return careState.schedules.when(
+          loading: () => const SizedBox(
+            height: 120,
+            child: Center(child: CircularProgressIndicator()),
+          ),
+          error: (err, _) => const SizedBox(),
+          data: (schedules) {
+            return careState.statistics.when(
+              loading: () => const SizedBox(
+                height: 120,
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (err, _) => const SizedBox(),
+              data: (statistics) {
+                return careState.todayLogs.when(
+                  loading: () => const SizedBox(
+                    height: 120,
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                  error: (err, _) => const SizedBox(),
+                  data: (todayLogs) {
+                    return _buildCardContent(context, ref, schedules, statistics, todayLogs);
+                  },
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildCardContent(
+    BuildContext context,
+    WidgetRef ref,
+    List<ScheduleEntity> schedules,
+    CareStatisticsEntity? statistics,
+    List<LogEntity> todayLogs,
+  ) {
+    final activeSchedules = schedules.where((s) => s.isActive).toList();
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -67,7 +111,7 @@ class MedicationScheduleCard extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        'Kepatuhan: ${(careProvider.statistics == null || (careProvider.statistics!.totalTaken + careProvider.statistics!.totalMissed) == 0) ? 0 : careProvider.statistics!.complianceRate.toStringAsFixed(0)}%',
+                        'Kepatuhan: ${(statistics == null || (statistics.totalTaken + statistics.totalMissed) == 0) ? 0 : statistics.complianceRate.toStringAsFixed(0)}%',
                         style: AppTextStyles.bodySmall.copyWith(
                           fontSize: 11,
                           color: AppColors.textSecondary,
@@ -96,11 +140,11 @@ class MedicationScheduleCard extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          if (schedules.isEmpty)
+          if (activeSchedules.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8.0),
               child: Text(
-                'Belum ada jadwal minum obat. Ketuk ikon pengaturan di kanan atas untuk menambahkan jadwal.',
+                'Belum ada jadwal minum obat aktif. Ketuk ikon pengaturan di kanan atas untuk menambahkan jadwal.',
                 style: AppTextStyles.bodySmall.copyWith(height: 1.4),
               ),
             )
@@ -108,13 +152,13 @@ class MedicationScheduleCard extends StatelessWidget {
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: schedules.length,
+              itemCount: activeSchedules.length,
               separatorBuilder: (_, __) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
-                final schedule = schedules[index];
+                final schedule = activeSchedules[index];
                 
                 // Find if there is a log for today and this schedule
-                final log = careProvider.todayLogs.firstWhere(
+                final log = todayLogs.firstWhere(
                   (l) => l.scheduleId == schedule.scheduleId,
                   orElse: () => _createDummyPendingLog(schedule.scheduleId),
                 );
@@ -176,7 +220,7 @@ class MedicationScheduleCard extends StatelessWidget {
                         )
                       else
                         ElevatedButton(
-                          onPressed: () => careProvider.confirmMedication(schedule.scheduleId),
+                          onPressed: () => ref.read(careNotifierProvider.notifier).confirmMedication(schedule.scheduleId),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -275,8 +319,8 @@ class MedicationScheduleCard extends StatelessWidget {
     );
   }
 
-  dynamic _createDummyPendingLog(String scheduleId) {
-    return LogResponse(
+  LogEntity _createDummyPendingLog(String scheduleId) {
+    return LogEntity(
       logId: '',
       scheduleId: scheduleId,
       reminderDate: '',

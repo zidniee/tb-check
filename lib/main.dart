@@ -17,10 +17,48 @@ import 'feature/doctor/presentation/providers/doctor_dashboard_provider.dart';
 import 'feature/notification/presentation/providers/notification_provider.dart';
 import 'feature/patient/presentation/providers/care_provider.dart';
 import 'feature/splash/presentation/splash_page.dart';
+import 'feature/appointment/presentation/providers/appointment_provider.dart';
+import 'feature/svir/presentation/providers/svir_provider.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  
+  final notification = message.notification;
+  final title = notification?.title ?? message.data['title'];
+  
+  // Use summary if available to keep notification short in notification tray, otherwise fall back to body
+  final summary = message.data['summary'];
+  final body = (summary != null && summary.isNotEmpty)
+      ? summary
+      : (notification?.body ?? message.data['body'] ?? message.data['message']);
+  
+  if (title != null || body != null) {
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const settings = InitializationSettings(android: androidSettings);
+    final plugin = FlutterLocalNotificationsPlugin();
+    await plugin.initialize(settings);
+
+    const androidDetails = AndroidNotificationDetails(
+      'tbcheck_notifications',
+      'TBCheck Notifikasi',
+      channelDescription: 'Menerima pemberitahuan medis dan konsultasi',
+      importance: Importance.max,
+      priority: Priority.high,
+      ticker: 'ticker',
+      visibility: NotificationVisibility.public,
+    );
+    const details = NotificationDetails(android: androidDetails);
+    await plugin.show(
+      message.hashCode,
+      title,
+      body,
+      details,
+      payload: message.data['notification_type'] ?? 'general',
+    );
+  }
 }
 
 void main() async {
@@ -28,6 +66,9 @@ void main() async {
   
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
+  
+  // Initialize date formatting for Indonesian locale to prevent LocaleDataException in HistoryPage
+  await initializeDateFormatting('id_ID', null);
   
   // Pre-load the local TFLite LSTM model to ensure instant inference
   final tfliteService = TfliteService();
@@ -50,6 +91,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => DoctorDashboardProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider(create: (_) => CareProvider()),
+        ChangeNotifierProvider(create: (_) => AppointmentProvider()),
+        ChangeNotifierProvider(create: (_) => SvirProvider()),
         ChangeNotifierProvider(
           create: (_) => EducationProvider(
             repository: EducationRepositoryImpl(),

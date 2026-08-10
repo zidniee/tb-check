@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../domain/entities/care_entities.dart';
 import '../providers/care_notifier.dart';
 import '../widgets/statistics_card.dart';
 
@@ -35,21 +36,69 @@ class StatisticsPage extends ConsumerWidget {
             return const Center(child: Text('Tidak ada statistik tersedia.'));
           }
 
-          // Avoid fake 100% compliance rate if there are no logs yet
-          final double rate = (stats.totalTaken + stats.totalMissed) > 0
-              ? stats.complianceRate
-              : 0.0;
+          final schedules = state.schedules.valueOrNull ?? [];
+          final history = state.history.valueOrNull ?? [];
 
-          // Mock daily compliance data for the chart (representing past week)
-          // In real production, we can calculate this from state.history
-          final double day1 = rate * 0.9;
-          final double day2 = rate * 0.95;
-          final double day3 = rate * 0.85;
-          final double day4 = rate;
-          final double day5 = rate * 0.92;
-          final double day6 = rate * 0.97;
-          final double day7 = rate;
-          final List<double> chartPoints = [day1, day2, day3, day4, day5, day6, day7];
+          // 1. Calculate active configured schedules frequency
+          final dailyScheduledCount = schedules.where((s) => s.isActive).length.clamp(1, 99);
+
+          // 2. Group history logs by date to count successful vs missed/pending days
+          final Map<String, List<LogEntity>> logsByDate = {};
+          for (final log in history) {
+            logsByDate.putIfAbsent(log.reminderDate, () => []).add(log);
+          }
+
+          int successfulDays = 0;
+          int missedDays = 0;
+          int pendingDays = 0;
+
+          for (final date in logsByDate.keys) {
+            final dayLogs = logsByDate[date]!;
+            final takenCount = dayLogs.where((log) => log.status == 'TAKEN').length;
+            final missedCount = dayLogs.where((log) => log.status == 'MISSED').length;
+            final pendingCount = dayLogs.where((log) => log.status == 'PENDING').length;
+
+            if (takenCount >= dailyScheduledCount) {
+              successfulDays++;
+            } else if (missedCount > 0) {
+              missedDays++;
+            } else if (pendingCount > 0) {
+              pendingDays++;
+            }
+          }
+
+          final totalDays = successfulDays + missedDays + pendingDays;
+          final activeTotalDays = successfulDays + missedDays;
+          final double rate = activeTotalDays > 0 ? (successfulDays / activeTotalDays) * 100.0 : 0.0;
+
+          // 3. Calculate daily compliance for the last 7 days dynamically
+          final now = DateTime.now();
+          final List<double> chartPoints = [];
+          for (int i = 6; i >= 0; i--) {
+            final date = now.subtract(Duration(days: i));
+            final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+            
+            final dayLogs = history.where((log) => log.reminderDate == dateStr).toList();
+            if (dayLogs.isEmpty) {
+              chartPoints.add(100.0); // Default to 100% if no logs yet
+            } else {
+              final takenCount = dayLogs.where((log) => log.status == 'TAKEN').length;
+              final dailyCompliance = (takenCount / dailyScheduledCount) * 100.0;
+              chartPoints.add(dailyCompliance.clamp(0.0, 100.0));
+            }
+          }
+
+          // 4. Generate dynamic X-axis labels
+          final List<String> chartLabels = [];
+          final dayNames = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+          for (int i = 6; i >= 0; i--) {
+            final date = now.subtract(Duration(days: i));
+            if (i == 0) {
+              chartLabels.add('Hari Ini');
+            } else {
+              chartLabels.add(dayNames[date.weekday % 7]);
+            }
+          }
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(20),
@@ -137,13 +186,13 @@ class StatisticsPage extends ConsumerWidget {
                         style: AppTextStyles.labelLarge.copyWith(fontSize: 16),
                       ),
                       const SizedBox(height: 16),
-                      _buildMetricRow('Total Jadwal Terapi', '${stats.totalScheduled} Kali', AppColors.primary),
+                      _buildMetricRow('Total Hari Terapi', '$totalDays Hari', AppColors.primary),
                       const Divider(height: 24),
-                      _buildMetricRow('Jadwal Berhasil Minum', '${stats.totalTaken} Kali', AppColors.success),
+                      _buildMetricRow('Hari Berhasil Minum', '$successfulDays Hari', AppColors.success),
                       const Divider(height: 24),
-                      _buildMetricRow('Jadwal Terlewat', '${stats.totalMissed} Kali', Colors.redAccent),
+                      _buildMetricRow('Hari Terlewat', '$missedDays Hari', Colors.redAccent),
                       const Divider(height: 24),
-                      _buildMetricRow('Jadwal Tertunda', '${stats.totalPending} Kali', AppColors.textSecondary.withOpacity(0.6)),
+                      _buildMetricRow('Hari Tertunda', '$pendingDays Hari', AppColors.textSecondary.withOpacity(0.6)),
                     ],
                   ),
                 ),
@@ -172,17 +221,22 @@ class StatisticsPage extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: const [
-                          Text('H-6', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                          Text('H-5', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                          Text('H-4', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                          Text('H-3', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                          Text('H-2', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                          Text('H-1', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                          Text('Hari Ini', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                        ],
+                      Padding(
+                        padding: const EdgeInsets.only(left: 35),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: chartLabels.map((label) {
+                            final isToday = label == 'Hari Ini';
+                            return Text(
+                              label,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                                color: isToday ? AppColors.primary : AppColors.textSecondary,
+                              ),
+                            );
+                          }).toList(),
+                        ),
                       ),
                     ],
                   ),
@@ -242,6 +296,60 @@ class SmoothLineChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (points.isEmpty) return;
 
+    final double chartLeft = 35.0; // Left margin for Y-axis labels
+    final double chartRight = size.width;
+    final double chartWidth = chartRight - chartLeft;
+    final double widthBetweenPoints = chartWidth / (points.length - 1);
+
+    // Scale compliance values (0-100) to height of the canvas (max height is size.height * 0.7)
+    double getY(double val) {
+      final percentage = val / 100.0;
+      return size.height - (percentage * size.height * 0.7) - 15;
+    }
+
+    // 1. Draw horizontal grid lines (dashed) and Y-axis labels
+    final paintGrid = Paint()
+      ..color = AppColors.border.withOpacity(0.4)
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+
+    void drawDashedLine(Canvas canvas, double x1, double y, double x2, Paint paint) {
+      const dashWidth = 4.0;
+      const dashSpace = 4.0;
+      double currentX = x1;
+      while (currentX < x2) {
+        canvas.drawLine(Offset(currentX, y), Offset(currentX + dashWidth, y), paint);
+        currentX += dashWidth + dashSpace;
+      }
+    }
+
+    void drawYLabel(String text, double y) {
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: text,
+          style: const TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 9,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      textPainter.layout();
+      textPainter.paint(canvas, Offset(0, y - textPainter.height / 2));
+    }
+
+    // Draw reference lines & labels at 100%, 50%, 0%
+    drawDashedLine(canvas, chartLeft, getY(100), chartRight, paintGrid);
+    drawYLabel('100%', getY(100));
+
+    drawDashedLine(canvas, chartLeft, getY(50), chartRight, paintGrid);
+    drawYLabel('50%', getY(50));
+
+    drawDashedLine(canvas, chartLeft, getY(0), chartRight, paintGrid);
+    drawYLabel('0%', getY(0));
+
+    // 2. Draw smooth line chart path and shadow
     final paintLine = Paint()
       ..color = AppColors.primary
       ..style = PaintingStyle.stroke
@@ -255,22 +363,14 @@ class SmoothLineChartPainter extends CustomPainter {
     final path = Path();
     final shadowPath = Path();
 
-    final double widthBetweenPoints = size.width / (points.length - 1);
-    
-    // Scale compliance values (0-100) to height of the canvas (max height is size.height * 0.8)
-    double getY(double val) {
-      final percentage = val / 100.0;
-      return size.height - (percentage * size.height * 0.8) - 10;
-    }
-
-    path.moveTo(0, getY(points[0]));
-    shadowPath.moveTo(0, size.height);
-    shadowPath.lineTo(0, getY(points[0]));
+    path.moveTo(chartLeft, getY(points[0]));
+    shadowPath.moveTo(chartLeft, size.height);
+    shadowPath.lineTo(chartLeft, getY(points[0]));
 
     for (int i = 0; i < points.length - 1; i++) {
-      final x1 = i * widthBetweenPoints;
+      final x1 = chartLeft + i * widthBetweenPoints;
       final y1 = getY(points[i]);
-      final x2 = (i + 1) * widthBetweenPoints;
+      final x2 = chartLeft + (i + 1) * widthBetweenPoints;
       final y2 = getY(points[i + 1]);
 
       final controlX1 = x1 + (widthBetweenPoints / 2);
@@ -282,22 +382,37 @@ class SmoothLineChartPainter extends CustomPainter {
       shadowPath.cubicTo(controlX1, controlY1, controlX2, controlY2, x2, y2);
     }
 
-    shadowPath.lineTo(size.width, size.height);
+    shadowPath.lineTo(chartRight, size.height);
     shadowPath.close();
 
-    // Draw paths
     canvas.drawPath(shadowPath, paintShadow);
     canvas.drawPath(path, paintLine);
 
-    // Draw dot for the last point
-    final lastX = size.width;
-    final lastY = getY(points.last);
-    
+    // 3. Draw dots and values on top of points
     final paintDotOuter = Paint()..color = AppColors.primaryLight;
     final paintDotInner = Paint()..color = AppColors.primary;
 
-    canvas.drawCircle(Offset(lastX, lastY), 8, paintDotOuter);
-    canvas.drawCircle(Offset(lastX, lastY), 4, paintDotInner);
+    for (int i = 0; i < points.length; i++) {
+      final x = chartLeft + i * widthBetweenPoints;
+      final y = getY(points[i]);
+
+      canvas.drawCircle(Offset(x, y), 6, paintDotOuter);
+      canvas.drawCircle(Offset(x, y), 3, paintDotInner);
+
+      final valuePainter = TextPainter(
+        text: TextSpan(
+          text: '${points[i].toStringAsFixed(0)}%',
+          style: const TextStyle(
+            color: AppColors.primary,
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      valuePainter.layout();
+      valuePainter.paint(canvas, Offset(x - valuePainter.width / 2, y - 18));
+    }
   }
 
   @override

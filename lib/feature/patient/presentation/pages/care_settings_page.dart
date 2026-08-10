@@ -1,31 +1,33 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_theme.dart';
-import '../providers/care_provider.dart';
+import '../providers/care_notifier.dart';
+import '../../domain/entities/care_entities.dart';
 
-class CareSettingsPage extends StatefulWidget {
+class CareSettingsPage extends ConsumerStatefulWidget {
   const CareSettingsPage({super.key});
 
   @override
-  State<CareSettingsPage> createState() => _CareSettingsPageState();
+  ConsumerState<CareSettingsPage> createState() => _CareSettingsPageState();
 }
 
-class _CareSettingsPageState extends State<CareSettingsPage> {
+class _CareSettingsPageState extends ConsumerState<CareSettingsPage> {
   DateTime _selectedStartDate = DateTime.now();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<CareProvider>(context, listen: false).loadCareData();
+      ref.read(careNotifierProvider.notifier).loadCareData();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final careProvider = Provider.of<CareProvider>(context);
+    final careState = ref.watch(careNotifierProvider);
+    final treatment = careState.treatment.valueOrNull;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -42,21 +44,21 @@ class _CareSettingsPageState extends State<CareSettingsPage> {
         ),
         centerTitle: true,
       ),
-      body: careProvider.isLoading
+      body: careState.isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: careProvider.treatment == null
-                  ? _buildSetupTreatmentForm(context, careProvider)
+              child: treatment == null
+                  ? _buildSetupTreatmentForm(context, ref)
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _buildTreatmentStatusCard(context, careProvider),
+                        _buildTreatmentStatusCard(context, ref, treatment),
                         const SizedBox(height: 20),
-                        _buildComplianceStatsCard(careProvider),
+                        _buildComplianceStatsCard(careState.statistics.valueOrNull),
                         const SizedBox(height: 20),
-                        _buildAlarmsManagementCard(context, careProvider),
+                        _buildAlarmsManagementCard(context, ref, careState.schedules.valueOrNull ?? []),
                         const SizedBox(height: 40),
                       ],
                     ),
@@ -64,7 +66,7 @@ class _CareSettingsPageState extends State<CareSettingsPage> {
     );
   }
 
-  Widget _buildSetupTreatmentForm(BuildContext context, CareProvider provider) {
+  Widget _buildSetupTreatmentForm(BuildContext context, WidgetRef ref) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -161,8 +163,12 @@ class _CareSettingsPageState extends State<CareSettingsPage> {
           ElevatedButton(
             onPressed: () {
               final dateStr = "${_selectedStartDate.year}-${_selectedStartDate.month.toString().padLeft(2, '0')}-${_selectedStartDate.day.toString().padLeft(2, '0')}";
-              final tz = DateTime.now().timeZoneName;
-              provider.setupTreatment(timezone: tz, startDate: dateStr);
+              final offset = DateTime.now().timeZoneOffset;
+              final hours = offset.inHours.abs().toString().padLeft(2, '0');
+              final minutes = (offset.inMinutes.abs() % 60).toString().padLeft(2, '0');
+              final sign = offset.isNegative ? '-' : '+';
+              final tz = '$sign$hours:$minutes';
+              ref.read(careNotifierProvider.notifier).setupTreatment(timezone: tz, startDate: dateStr);
             },
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 14),
@@ -175,8 +181,7 @@ class _CareSettingsPageState extends State<CareSettingsPage> {
     );
   }
 
-  Widget _buildTreatmentStatusCard(BuildContext context, CareProvider provider) {
-    final treatment = provider.treatment!;
+  Widget _buildTreatmentStatusCard(BuildContext context, WidgetRef ref, TreatmentEntity treatment) {
     final date = DateTime.tryParse(treatment.startDate) ?? DateTime.now();
 
     return Container(
@@ -199,7 +204,7 @@ class _CareSettingsPageState extends State<CareSettingsPage> {
               Switch(
                 value: treatment.reminderEnabled,
                 onChanged: (val) {
-                  provider.updateTreatmentReminder(val);
+                  ref.read(careNotifierProvider.notifier).updateTreatmentReminder(val);
                 },
                 activeColor: AppColors.primary,
               ),
@@ -235,7 +240,7 @@ class _CareSettingsPageState extends State<CareSettingsPage> {
           ),
           const Divider(height: 24, color: AppColors.border),
           OutlinedButton(
-            onPressed: () => _showStopTreatmentDialog(context, provider),
+            onPressed: () => _showStopTreatmentDialog(context, ref),
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.redAccent,
               side: const BorderSide(color: Colors.redAccent),
@@ -248,13 +253,10 @@ class _CareSettingsPageState extends State<CareSettingsPage> {
     );
   }
 
-  Widget _buildComplianceStatsCard(CareProvider provider) {
-    final stats = provider.statistics;
+  Widget _buildComplianceStatsCard(CareStatisticsEntity? stats) {
     if (stats == null) return const SizedBox();
 
-    // The backend returns complianceRate as 0-100 (percentage)
     final double compliancePercentage = stats.complianceRate;
-    // If no doses taken or missed yet, set compliance to 0% to avoid fake 100%
     final double realPercentage = (stats.totalTaken + stats.totalMissed) > 0 
         ? compliancePercentage 
         : 0.0;
@@ -277,7 +279,6 @@ class _CareSettingsPageState extends State<CareSettingsPage> {
           const SizedBox(height: 16),
           Row(
             children: [
-              // Radial Gauge
               SizedBox(
                 width: 80,
                 height: 80,
@@ -308,7 +309,6 @@ class _CareSettingsPageState extends State<CareSettingsPage> {
                 ),
               ),
               const SizedBox(width: 20),
-              // Legend Info
               Expanded(
                 child: Column(
                   children: [
@@ -351,9 +351,7 @@ class _CareSettingsPageState extends State<CareSettingsPage> {
     );
   }
 
-  Widget _buildAlarmsManagementCard(BuildContext context, CareProvider provider) {
-    final schedules = provider.schedules;
-
+  Widget _buildAlarmsManagementCard(BuildContext context, WidgetRef ref, List<ScheduleEntity> schedules) {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -372,7 +370,7 @@ class _CareSettingsPageState extends State<CareSettingsPage> {
                 style: AppTextStyles.labelLarge.copyWith(fontSize: 16),
               ),
               TextButton.icon(
-                onPressed: () => _addNewAlarm(context, provider),
+                onPressed: () => _addNewAlarm(context, ref),
                 icon: const Icon(Icons.add, size: 16, color: AppColors.primary),
                 label: Text(
                   'Tambah',
@@ -422,7 +420,7 @@ class _CareSettingsPageState extends State<CareSettingsPage> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
-                        onPressed: () => provider.deleteSchedule(schedule.scheduleId),
+                        onPressed: () => ref.read(careNotifierProvider.notifier).deleteSchedule(schedule.scheduleId),
                       ),
                     ],
                   ),
@@ -434,7 +432,7 @@ class _CareSettingsPageState extends State<CareSettingsPage> {
     );
   }
 
-  void _addNewAlarm(BuildContext context, CareProvider provider) async {
+  void _addNewAlarm(BuildContext context, WidgetRef ref) async {
     final pickedTime = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
@@ -454,11 +452,11 @@ class _CareSettingsPageState extends State<CareSettingsPage> {
       final hour = pickedTime.hour.toString().padLeft(2, '0');
       final minute = pickedTime.minute.toString().padLeft(2, '0');
       final timeStr = "$hour:$minute";
-      provider.addSchedule(timeStr);
+      ref.read(careNotifierProvider.notifier).addSchedule(timeStr);
     }
   }
 
-  void _showStopTreatmentDialog(BuildContext context, CareProvider provider) {
+  void _showStopTreatmentDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
       builder: (context) {
@@ -474,7 +472,7 @@ class _CareSettingsPageState extends State<CareSettingsPage> {
             ),
             TextButton(
               onPressed: () {
-                provider.deleteTreatment();
+                ref.read(careNotifierProvider.notifier).deleteTreatment();
                 Navigator.pop(context);
               },
               child: const Text('Ya, Hentikan', style: TextStyle(color: Colors.redAccent)),

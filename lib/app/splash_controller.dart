@@ -18,32 +18,50 @@ class SplashController {
     try {
       if (!context.mounted) return false;
       final profileProvider = Provider.of<ProfileProvider>(context, listen: false);
-      await profileProvider.loadLocalProfile();
-      profileProvider.fetchProfile();
-      profileProvider.updateGPSLocation();
+      
+      // Load local profile first (no network connection required, takes 0ms)
+      try {
+        await profileProvider.loadLocalProfile();
+      } catch (_) {}
 
-      final role = await storage.getUserRole();
-      if (!context.mounted) return false;
-
-      if (role == 'DOCTOR') {
-        final doctorProvider = Provider.of<DoctorDashboardProvider>(context, listen: false);
-        await doctorProvider.fetchDashboard();
-      } else {
-        final dashboardProvider = Provider.of<DashboardProvider>(context, listen: false);
-        await dashboardProvider.fetchDashboard();
-      }
-
-      if (!context.mounted) return false;
-      final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
-      await notificationProvider.fetchNotifications();
-
-      // Initialize FCM Service
-      if (!context.mounted) return false;
-      await FCMService().initialize(context);
+      // Trigger all remote network fetches in the background asynchronously
+      // so we don't block the splash screen rendering!
+      _initializeInBackground(context);
 
       return true;
     } catch (_) {
-      return false;
+      return true;
     }
+  }
+
+  static void _initializeInBackground(BuildContext context) async {
+    try {
+      final profileProvider = Provider.of<ProfileProvider>(context, listen: false);
+      // Fetch fresh profile from server in background
+      profileProvider.fetchProfile();
+      profileProvider.updateGPSLocation();
+    } catch (_) {}
+
+    try {
+      final storage = SecureStorageService();
+      final role = await storage.getUserRole();
+      
+      if (role == 'DOCTOR') {
+        final doctorProvider = Provider.of<DoctorDashboardProvider>(context, listen: false);
+        doctorProvider.fetchDashboard();
+      } else {
+        final dashboardProvider = Provider.of<DashboardProvider>(context, listen: false);
+        dashboardProvider.fetchDashboard();
+      }
+    } catch (_) {}
+
+    try {
+      final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
+      notificationProvider.fetchNotifications();
+    } catch (_) {}
+
+    try {
+      await FCMService().initialize(context);
+    } catch (_) {}
   }
 }

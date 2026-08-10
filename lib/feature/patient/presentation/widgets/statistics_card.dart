@@ -4,25 +4,47 @@ import '../../domain/entities/care_entities.dart';
 
 class StatisticsCard extends StatelessWidget {
   final CareStatisticsEntity? statistics;
+  final List<ScheduleEntity> schedules;
+  final List<LogEntity> history;
   final VoidCallback onTap;
 
   const StatisticsCard({
     super.key,
     required this.statistics,
+    required this.schedules,
+    required this.history,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final hasStats = statistics != null;
-    final totalTaken = statistics?.totalTaken ?? 0;
-    final totalMissed = statistics?.totalMissed ?? 0;
-    
-    // Avoid fake 100% compliance rate if there are no logs yet
-    final double rate = (hasStats && (totalTaken + totalMissed) > 0)
-        ? statistics!.complianceRate
-        : 0.0;
-        
+    // 1. Calculate daily schedule count (frequency)
+    final dailyScheduledCount = schedules.where((s) => s.isActive).length.clamp(1, 99);
+
+    // 2. Group history logs by date
+    final Map<String, List<LogEntity>> logsByDate = {};
+    for (final log in history) {
+      logsByDate.putIfAbsent(log.reminderDate, () => []).add(log);
+    }
+
+    // 3. Count successful and missed days based on uppercase status values
+    int successfulDays = 0;
+    int missedDays = 0;
+
+    for (final date in logsByDate.keys) {
+      final dayLogs = logsByDate[date]!;
+      final takenCount = dayLogs.where((log) => log.status == 'TAKEN').length;
+      final missedCount = dayLogs.where((log) => log.status == 'MISSED').length;
+
+      if (takenCount >= dailyScheduledCount) {
+        successfulDays++;
+      } else if (missedCount > 0) {
+        missedDays++;
+      }
+    }
+
+    final totalDays = successfulDays + missedDays;
+    final double rate = totalDays > 0 ? (successfulDays / totalDays) * 100.0 : 0.0;
     final progress = rate / 100.0;
 
     return InkWell(
@@ -97,9 +119,9 @@ class StatisticsCard extends StatelessWidget {
                 Expanded(
                   child: Column(
                     children: [
-                      _buildRowItem('Berhasil', '$totalTaken Hari', AppColors.success),
+                      _buildRowItem('Berhasil', '$successfulDays Hari', AppColors.success),
                       const SizedBox(height: 8),
-                      _buildRowItem('Terlewat', '$totalMissed Hari', Colors.redAccent),
+                      _buildRowItem('Terlewat', '$missedDays Hari', Colors.redAccent),
                     ],
                   ),
                 ),

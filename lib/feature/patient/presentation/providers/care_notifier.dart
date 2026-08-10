@@ -1,6 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dartz/dartz.dart';
+import 'dart:convert';
 
+import '../../../../core/storage/cache_service.dart';
+import '../../data/models/care_models.dart';
 import '../../../../core/network/api_exception.dart';
 import '../../../../core/network/api_service.dart';
 import '../../data/datasources/care_remote_data_source.dart';
@@ -50,8 +53,58 @@ class CareNotifier extends StateNotifier<CareState> {
   }
 
   Future<void> loadCareData() async {
-    // Set all states to loading if they aren't already
-    if (!state.isLoading) {
+    // 1. Try to load cached data for instant render
+    final cache = CacheService();
+    try {
+      final todayStr = _formatDate(DateTime.now());
+      final thirtyDaysAgoStr = _formatDate(DateTime.now().subtract(const Duration(days: 30)));
+
+      final cachedTreatmentStr = await cache.getCachedData('cache_treatment');
+      final cachedSchedulesStr = await cache.getCachedData('cache_schedules');
+      final cachedStatsStr = await cache.getCachedData('cache_statistics');
+      final cachedTodayLogsStr = await cache.getCachedData('cache_history_${todayStr}_$todayStr');
+      final cachedHistoryStr = await cache.getCachedData('cache_history_${thirtyDaysAgoStr}_$todayStr');
+
+      TreatmentEntity? cachedTreatment;
+      List<ScheduleEntity> cachedSchedules = [];
+      CareStatisticsEntity? cachedStats;
+      List<LogEntity> cachedTodayLogs = [];
+      List<LogEntity> cachedHistory = [];
+
+      if (cachedTreatmentStr != null) {
+        cachedTreatment = TreatmentEntity.fromJson(jsonDecode(cachedTreatmentStr));
+      }
+      if (cachedSchedulesStr != null) {
+        final List<dynamic> list = jsonDecode(cachedSchedulesStr);
+        cachedSchedules = list.map((e) => ScheduleEntity.fromJson(e as Map<String, dynamic>)).toList();
+      }
+      if (cachedStatsStr != null) {
+        cachedStats = CareStatisticsEntity.fromJson(jsonDecode(cachedStatsStr));
+      }
+      if (cachedTodayLogsStr != null) {
+        final List<dynamic> list = jsonDecode(cachedTodayLogsStr);
+        cachedTodayLogs = list.map((e) => LogEntity.fromJson(e as Map<String, dynamic>)).toList();
+      }
+      if (cachedHistoryStr != null) {
+        final List<dynamic> list = jsonDecode(cachedHistoryStr);
+        cachedHistory = list.map((e) => LogEntity.fromJson(e as Map<String, dynamic>)).toList();
+      }
+
+      if (cachedTreatment != null) {
+        state = CareState(
+          treatment: AsyncValue.data(cachedTreatment),
+          schedules: AsyncValue.data(cachedSchedules),
+          statistics: AsyncValue.data(cachedStats),
+          todayLogs: AsyncValue.data(cachedTodayLogs),
+          history: AsyncValue.data(cachedHistory),
+        );
+      }
+    } catch (_) {
+      // Fail silently on cache loading errors
+    }
+
+    // Set states to loading if we don't have any cached data yet to avoid blank screens
+    if (state.treatment.valueOrNull == null) {
       state = state.copyWith(
         treatment: const AsyncValue.loading(),
         schedules: const AsyncValue.loading(),
@@ -61,7 +114,7 @@ class CareNotifier extends StateNotifier<CareState> {
       );
     }
 
-    // 1. Fetch Treatment
+    // 2. Fetch Treatment from server
     final treatmentRes = await _ref.read(getTreatmentUseCaseProvider).call();
     
     await treatmentRes.fold(
@@ -75,20 +128,34 @@ class CareNotifier extends StateNotifier<CareState> {
             todayLogs: const AsyncValue.data([]),
             history: const AsyncValue.data([]),
           );
+          try {
+            await cache.clearCache('cache_treatment');
+            await cache.clearCache('cache_schedules');
+            await cache.clearCache('cache_statistics');
+          } catch (_) {}
         } else {
-          state = state.copyWith(
-            treatment: AsyncValue.error(failure.message, StackTrace.current),
-            schedules: AsyncValue.error(failure.message, StackTrace.current),
-            statistics: AsyncValue.error(failure.message, StackTrace.current),
-            todayLogs: AsyncValue.error(failure.message, StackTrace.current),
-            history: AsyncValue.error(failure.message, StackTrace.current),
-          );
+          // Only show error if we have no cached data; otherwise keep the cached data
+          if (state.treatment.valueOrNull == null) {
+            state = state.copyWith(
+              treatment: AsyncValue.error(failure.message, StackTrace.current),
+              schedules: AsyncValue.error(failure.message, StackTrace.current),
+              statistics: AsyncValue.error(failure.message, StackTrace.current),
+              todayLogs: AsyncValue.error(failure.message, StackTrace.current),
+              history: AsyncValue.error(failure.message, StackTrace.current),
+            );
+          }
         }
       },
       (treatment) async {
         state = state.copyWith(treatment: AsyncValue.data(treatment));
         
-        if (treatment.isActive) {
+        if (treatment != null) {
+          try {
+            await cache.cacheData('cache_treatment', jsonEncode(treatment.toJson()));
+          } catch (_) {}
+        }
+
+        if (treatment != null && treatment.isActive) {
           // Parallel fetch schedules, statistics, and history (last 30 days)
           final todayStr = _formatDate(DateTime.now());
           final thirtyDaysAgoStr = _formatDate(DateTime.now().subtract(const Duration(days: 30)));
@@ -105,25 +172,61 @@ class CareNotifier extends StateNotifier<CareState> {
           final todayLogsRes = results[2] as Either<ApiException, List<LogEntity>>;
           final historyRes = results[3] as Either<ApiException, List<LogEntity>>;
 
-          // Map results to state
+          // Map results to state and update cache
           schedulesRes.fold(
-            (l) => state = state.copyWith(schedules: AsyncValue.error(l.message, StackTrace.current)),
-            (r) => state = state.copyWith(schedules: AsyncValue.data(r)),
+            (l) {
+              if (state.schedules.valueOrNull == null) {
+                state = state.copyWith(schedules: AsyncValue.error(l.message, StackTrace.current));
+              }
+            },
+            (r) {
+              state = state.copyWith(schedules: AsyncValue.data(r));
+              try {
+                cache.cacheData('cache_schedules', jsonEncode(r.map((e) => e.toJson()).toList()));
+              } catch (_) {}
+            },
           );
 
           statsRes.fold(
-            (l) => state = state.copyWith(statistics: AsyncValue.error(l.message, StackTrace.current)),
-            (r) => state = state.copyWith(statistics: AsyncValue.data(r)),
+            (l) {
+              if (state.statistics.valueOrNull == null) {
+                state = state.copyWith(statistics: AsyncValue.error(l.message, StackTrace.current));
+              }
+            },
+            (r) {
+              state = state.copyWith(statistics: AsyncValue.data(r));
+              try {
+                cache.cacheData('cache_statistics', jsonEncode(r.toJson()));
+              } catch (_) {}
+            },
           );
 
           todayLogsRes.fold(
-            (l) => state = state.copyWith(todayLogs: AsyncValue.error(l.message, StackTrace.current)),
-            (r) => state = state.copyWith(todayLogs: AsyncValue.data(r)),
+            (l) {
+              if (state.todayLogs.valueOrNull == null) {
+                state = state.copyWith(todayLogs: AsyncValue.error(l.message, StackTrace.current));
+              }
+            },
+            (r) {
+              state = state.copyWith(todayLogs: AsyncValue.data(r));
+              try {
+                cache.cacheData('cache_history_${todayStr}_$todayStr', jsonEncode(r.map((e) => e.toJson()).toList()));
+              } catch (_) {}
+            },
           );
 
           historyRes.fold(
-            (l) => state = state.copyWith(history: AsyncValue.error(l.message, StackTrace.current)),
-            (r) => state = state.copyWith(history: AsyncValue.data(r)),
+            (l) {
+              if (state.history.valueOrNull == null) {
+                state = state.copyWith(history: AsyncValue.error(l.message, StackTrace.current));
+              }
+            },
+            (r) {
+              state = state.copyWith(history: AsyncValue.data(r));
+              try {
+                cache.cacheData('cache_history_${thirtyDaysAgoStr}_$todayStr', jsonEncode(r.map((e) => e.toJson()).toList()));
+              } catch (_) {}
+            },
           );
         } else {
           state = state.copyWith(

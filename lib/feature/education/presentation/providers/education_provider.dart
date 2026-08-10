@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../../../../core/storage/cache_service.dart';
 import '../../domain/entities/education_content.dart';
 import '../../domain/entities/learning_stats.dart';
 import '../../domain/repositories/education_repository.dart';
@@ -76,11 +78,26 @@ class EducationProvider extends ChangeNotifier {
 
   /// Fetches the initial page of contents. Resets pagination.
   Future<void> fetchContents({String? contentType}) async {
-    _isLoading = true;
     _error = null;
     _currentPage = 1;
     _activeContentTypeFilter = contentType;
-    notifyListeners();
+
+    // 1. Try loading cached contents instantly if list is empty
+    try {
+      final cacheKey = 'cache_education_contents_${contentType ?? 'all'}';
+      final cachedStr = await CacheService().getCachedData(cacheKey);
+      if (cachedStr != null && _contents.isEmpty) {
+        final List<dynamic> jsonList = jsonDecode(cachedStr);
+        _contents = jsonList.map((e) => EducationContent.fromJson(e as Map<String, dynamic>)).toList();
+        notifyListeners();
+      }
+    } catch (_) {}
+
+    // Only show loading if we have no contents in memory/cache yet
+    if (_contents.isEmpty) {
+      _isLoading = true;
+      notifyListeners();
+    }
 
     try {
       final result = await _repository.getContents(
@@ -91,9 +108,18 @@ class EducationProvider extends ChangeNotifier {
       _contents = result.contents;
       _totalItems = result.total;
       _hasMore = result.hasMore;
+
+      // Save to cache
+      try {
+        final cacheKey = 'cache_education_contents_${contentType ?? 'all'}';
+        final jsonList = _contents.map((e) => e.toJson()).toList();
+        await CacheService().cacheData(cacheKey, jsonEncode(jsonList));
+      } catch (_) {}
     } catch (e) {
-      _error = e.toString();
-      _contents = [];
+      if (_contents.isEmpty) {
+        _error = e.toString();
+        _contents = [];
+      }
     }
 
     _isLoading = false;
@@ -244,13 +270,33 @@ class EducationProvider extends ChangeNotifier {
 
   /// Fetches learning statistics for the current user.
   Future<void> fetchLearningStats() async {
-    _isLoadingStats = true;
-    notifyListeners();
+    // 1. Try loading cached stats instantly
+    try {
+      final cachedStr = await CacheService().getCachedData('cache_education_stats');
+      if (cachedStr != null && _stats == null) {
+        _stats = LearningStats.fromJson(jsonDecode(cachedStr));
+        notifyListeners();
+      }
+    } catch (_) {}
+
+    // Only show loading if we have no stats yet
+    if (_stats == null) {
+      _isLoadingStats = true;
+      notifyListeners();
+    }
 
     try {
-      _stats = await _repository.getLearningStats();
+      final data = await _repository.getLearningStats();
+      _stats = data;
+      
+      // Save to cache
+      try {
+        await CacheService().cacheData('cache_education_stats', jsonEncode(data.toJson()));
+      } catch (_) {}
     } catch (e) {
-      _error = e.toString();
+      if (_stats == null) {
+        _error = e.toString();
+      }
     }
 
     _isLoadingStats = false;

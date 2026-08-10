@@ -107,7 +107,7 @@ class ProfileProvider extends ChangeNotifier {
         if (json.containsKey('patient_id')) {
           final profileData = PatientProfileDTO.fromJson(json);
           _fullName = profileData.fullName;
-          if (profileData.email.isNotEmpty) {
+          if (profileData.email.isNotEmpty && profileData.email.contains('@')) {
             _email = profileData.email;
           }
           _phone = profileData.phone;
@@ -125,7 +125,7 @@ class ProfileProvider extends ChangeNotifier {
         } else if (json.containsKey('doctor_id')) {
           final profileData = DoctorProfileDTO.fromJson(json);
           _doctorName = profileData.fullName;
-          if (profileData.email.isNotEmpty) {
+          if (profileData.email.isNotEmpty && profileData.email.contains('@')) {
             _email = profileData.email;
           }
           _doctorPhone = profileData.phone;
@@ -145,9 +145,11 @@ class ProfileProvider extends ChangeNotifier {
       await loadLocalProfile();
     }
 
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
+    if (_fullName.isEmpty && _doctorName.isEmpty) {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+    }
 
     final savedEmail = await _storage.getUserEmail();
     if (savedEmail != null && savedEmail.isNotEmpty) {
@@ -160,7 +162,9 @@ class ProfileProvider extends ChangeNotifier {
 
     await result.fold(
       (failure) async {
-        _errorMessage = failure.message;
+        if (_fullName.isEmpty && _doctorName.isEmpty) {
+          _errorMessage = failure.message;
+        }
         notifyListeners();
       },
       (profileData) async {
@@ -169,7 +173,7 @@ class ProfileProvider extends ChangeNotifier {
 
         if (profileData is PatientProfileDTO) {
           _fullName = profileData.fullName;
-          if (profileData.email.isNotEmpty) {
+          if (profileData.email.isNotEmpty && profileData.email.contains('@')) {
             _email = profileData.email;
           }
           _phone = profileData.phone;
@@ -189,7 +193,7 @@ class ProfileProvider extends ChangeNotifier {
           }
         } else if (profileData is DoctorProfileDTO) {
           _doctorName = profileData.fullName;
-          if (profileData.email.isNotEmpty) {
+          if (profileData.email.isNotEmpty && profileData.email.contains('@')) {
             _email = profileData.email;
           }
           _doctorPhone = profileData.phone;

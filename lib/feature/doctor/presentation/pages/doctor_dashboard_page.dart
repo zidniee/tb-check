@@ -6,8 +6,9 @@ import '../../../../core/utils/snackbar_utils.dart';
 import '../../../profile/presentation/providers/profile_provider.dart';
 import '../widgets/patient_progress_chart.dart';
 import '../widgets/risk_distribution_chart.dart';
-
 import '../providers/doctor_dashboard_provider.dart';
+import '../../../notification/presentation/providers/notification_provider.dart';
+import '../../../notification/presentation/pages/notifikasi_page.dart';
 
 class DoctorDashboardPage extends StatefulWidget {
   final VoidCallback onPatientsTabTap;
@@ -29,6 +30,7 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<DoctorDashboardProvider>(context, listen: false).fetchDashboard();
+      Provider.of<NotificationProvider>(context, listen: false).fetchNotifications();
     });
   }
 
@@ -160,41 +162,54 @@ class _DoctorDashboardPageState extends State<DoctorDashboardPage> {
           ],
         ),
         // Notification Button with badge
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () {
-                  SnackBarUtils.showInfo(context, 'Tidak ada notifikasi baru.');
-                },
-                borderRadius: BorderRadius.circular(12),
-                child: Ink(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
+        Consumer<NotificationProvider>(
+          builder: (context, notificationProvider, _) {
+            final unreadCount = notificationProvider.unreadCount;
+            return Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const NotifikasiPage(),
+                        ),
+                      ).then((_) {
+                        notificationProvider.fetchNotifications();
+                      });
+                    },
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.border.withOpacity(0.5)),
+                    child: Ink(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.border.withOpacity(0.5)),
+                      ),
+                      child: const Icon(Icons.notifications_none_rounded, color: AppColors.textPrimary, size: 20),
+                    ),
                   ),
-                  child: const Icon(Icons.notifications_none_rounded, color: AppColors.textPrimary, size: 20),
                 ),
-              ),
-            ),
-            Positioned(
-              top: 10,
-              right: 10,
-              child: Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFEF4444), // Red alert badge
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-          ],
+                if (unreadCount > 0)
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFEF4444), // Red alert badge
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
         ),
       ],
     );

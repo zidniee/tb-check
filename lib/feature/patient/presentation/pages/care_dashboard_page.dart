@@ -115,6 +115,8 @@ class CareDashboardPage extends ConsumerWidget {
                     error: (_, __) => const SizedBox(),
                     data: (stats) => StatisticsCard(
                       statistics: stats,
+                      schedules: state.schedules.valueOrNull ?? [],
+                      history: state.history.valueOrNull ?? [],
                       onTap: () {
                         Navigator.push(
                           context,

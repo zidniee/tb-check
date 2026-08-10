@@ -3,6 +3,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../feature/notification/presentation/pages/notifikasi_page.dart';
 import '../../feature/notification/presentation/pages/notification_detail_page.dart';
 import '../../feature/patient/presentation/pages/care_dashboard_page.dart';
+import '../../feature/appointment/presentation/pages/appointment_detail_page.dart';
+import '../../feature/appointment/presentation/pages/appointment_history_page.dart';
 
 class NotificationRouter {
   static void navigate(
@@ -13,7 +15,7 @@ class NotificationRouter {
     String? actionValue,
   }) {
     // 1. If it's a medication reminder
-    if (notificationType == 'CARE_REMINDER') {
+    if (notificationType == 'CARE_REMINDER' || notificationType == 'REMINDER') {
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -23,28 +25,77 @@ class NotificationRouter {
       return;
     }
 
-    // 2. If the action is opening an external URL
-    if (actionType == 'OPEN_URL' && actionValue != null && actionValue.isNotEmpty) {
-      final uri = Uri.parse(actionValue);
-      canLaunchUrl(uri).then((canLaunch) {
-        if (canLaunch) {
-          launchUrl(uri, mode: LaunchMode.externalApplication);
-        }
-      });
+    // 2. If it's an appointment notification
+    if (notificationType == 'APPOINTMENT') {
+      if (relatedId != null && relatedId.isNotEmpty) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AppointmentDetailPage(appointmentId: relatedId),
+          ),
+        );
+      } else {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const AppointmentHistoryPage(),
+          ),
+        );
+      }
       return;
     }
 
-    // 3. If the action is opening a specific screen
-    if (actionType == 'OPEN_SCREEN' && actionValue != null && actionValue.isNotEmpty) {
-      // Since named routes are not registered, we can fall back to general route
-      // or expand this if there are specific screen builders.
-      // For now, redirect to NotifikasiPage as a fallback.
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const NotifikasiPage(),
-        ),
-      );
+    // 3. Handle OPEN_SCREEN action type
+    if ((actionType == 'OPEN_SCREEN' || actionType == 'open_screen') && actionValue != null && actionValue.isNotEmpty) {
+      final cleanVal = actionValue.trim().toLowerCase();
+      if (cleanVal == '/care/dashboard' || cleanVal == 'care_dashboard' || cleanVal == '/care') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const CareDashboardPage(),
+          ),
+        );
+        return;
+      }
+      if (cleanVal == '/appointments/history' || cleanVal == 'appointment_history' || cleanVal == '/appointments') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const AppointmentHistoryPage(),
+          ),
+        );
+        return;
+      }
+      if (cleanVal == '/notifications' || cleanVal == 'notifications') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const NotifikasiPage(),
+          ),
+        );
+        return;
+      }
+      if ((cleanVal == '/appointments/detail' || cleanVal == 'appointment_detail') && relatedId != null && relatedId.isNotEmpty) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AppointmentDetailPage(appointmentId: relatedId),
+          ),
+        );
+        return;
+      }
+
+      // Fallback: Pushing named route
+      try {
+        Navigator.pushNamed(context, actionValue);
+        return;
+      } catch (_) {}
+    }
+
+    // 4. If the action is opening an external URL
+    if ((actionType == 'OPEN_URL' || actionType == 'open_url') && actionValue != null && actionValue.isNotEmpty) {
+      final uri = Uri.parse(actionValue);
+      launchUrl(uri, mode: LaunchMode.externalApplication);
       return;
     }
 

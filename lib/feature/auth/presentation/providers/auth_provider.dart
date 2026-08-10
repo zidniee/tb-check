@@ -1,13 +1,16 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/api_exception.dart';
 import '../../../../core/network/api_service.dart';
 import '../../../../core/storage/secure_storage_service.dart';
+import '../../../../core/storage/cache_service.dart';
 import '../../data/datasources/auth_remote_data_source.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../domain/usecases/login_with_google.dart';
+import '../../../notification/data/datasources/notification_remote_data_source.dart';
 
 enum UserRole { patient, doctor }
 
@@ -474,6 +477,20 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       await GoogleSignIn.instance.signOut();
+    } catch (_) {}
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final deviceId = prefs.getString('device_id');
+      if (deviceId != null && deviceId.isNotEmpty) {
+        final notifDS = NotificationRemoteDataSourceImpl(apiService: ApiService());
+        await notifDS.unregisterDeviceToken(deviceId: deviceId);
+      }
+    } catch (_) {}
+
+    // Clear all business data caches
+    try {
+      await CacheService().clearAllCache();
     } catch (_) {}
 
     await _authRepository.logout();

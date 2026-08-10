@@ -246,7 +246,7 @@ class ScreeningProvider extends ChangeNotifier {
       final submitRes = await _screeningRepository.submitReport(
         probabilityScore: result.probabilityScore,
         predictionStatus: result.screeningStatus,
-        mfccMeanVector: _mfccData!.toList(),
+        mfccMeanVector: _calculateMfccMean(_mfccData!),
         clinicalAnswers: getClinicalAnswersMap(),
       );
 
@@ -322,6 +322,30 @@ class ScreeningProvider extends ChangeNotifier {
     }
 
     return ValidationResult(isValid: true, message: 'OK');
+  }
+
+  /// Calculates the mean vector of the 13 static MFCC coefficients across all 500 frames.
+  /// This returns exactly 13 values matching backend validation and database checks.
+  List<double> _calculateMfccMean(Float32List mfccData) {
+    const int numFrames = 500;
+    const int numFeatures = 39;
+    const int targetFeatures = 13;
+
+    final List<double> meanVector = List<double>.filled(targetFeatures, 0.0);
+
+    if (mfccData.length < numFrames * numFeatures) {
+      return List<double>.filled(targetFeatures, 0.0);
+    }
+
+    for (int c = 0; c < targetFeatures; c++) {
+      double sum = 0.0;
+      for (int f = 0; f < numFrames; f++) {
+        sum += mfccData[f * numFeatures + c];
+      }
+      meanVector[c] = sum / numFrames;
+    }
+
+    return meanVector;
   }
 
   void reset() {

@@ -121,6 +121,23 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
                         fontSize: 12,
                       ),
                     ),
+                    if (detail.readAt != null) ...[
+                      const SizedBox(width: 12),
+                      const Icon(
+                        Icons.done_all_rounded,
+                        size: 16,
+                        color: AppColors.primary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Dibaca ${_formatDateTime(detail.readAt!)}',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.primary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 if (detail.summary != null && detail.summary!.isNotEmpty) ...[

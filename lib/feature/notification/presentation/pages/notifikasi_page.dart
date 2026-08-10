@@ -50,75 +50,142 @@ class _NotifikasiPageState extends State<NotifikasiPage> {
       ),
       body: provider.isLoading
           ? const Center(child: CircularProgressIndicator())
-          : provider.notifications.isEmpty
-              ? _buildEmptyState()
-              : RefreshIndicator(
-                  onRefresh: () => provider.fetchNotifications(),
-                  child: ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    itemCount: provider.notifications.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final item = provider.notifications[index];
-                      return Container(
-                        decoration: BoxDecoration(
-                          color: item.isRead ? Colors.white : AppColors.primaryLight.withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: item.isRead ? AppColors.border : AppColors.primary.withOpacity(0.3),
-                          ),
-                        ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          leading: CircleAvatar(
-                            backgroundColor: item.isRead ? AppColors.background : AppColors.primaryLight,
-                            child: Icon(
-                              _getIconForType(item.notificationType),
-                              color: item.isRead ? AppColors.textSecondary : AppColors.primary,
+          : provider.errorMessage != null
+              ? _buildErrorState(provider.errorMessage!)
+              : provider.notifications.isEmpty
+                  ? _buildEmptyState()
+                  : RefreshIndicator(
+                      onRefresh: () => provider.fetchNotifications(),
+                      child: ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        itemCount: provider.notifications.length,
+                        separatorBuilder: (context, index) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final item = provider.notifications[index];
+                          return Dismissible(
+                            key: Key(item.notificationId),
+                            direction: DismissDirection.endToStart,
+                            background: Container(
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 20),
+                              decoration: BoxDecoration(
+                                color: Colors.redAccent.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: const Icon(
+                                Icons.delete_outline_rounded,
+                                color: Colors.redAccent,
+                                size: 28,
+                              ),
                             ),
-                          ),
-                          title: Text(
-                            item.title,
-                            style: AppTextStyles.labelLarge.copyWith(
-                              fontWeight: item.isRead ? FontWeight.normal : FontWeight.bold,
-                              fontSize: 15,
+                            onDismissed: (direction) {
+                              provider.deleteNotification(item.notificationId);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Notifikasi berhasil dihapus'),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: item.isRead ? Colors.white : AppColors.primaryLight.withOpacity(0.3),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: item.isRead ? AppColors.border : AppColors.primary.withOpacity(0.3),
+                                ),
+                              ),
+                              child: ListTile(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                leading: CircleAvatar(
+                                  backgroundColor: item.isRead ? AppColors.background : AppColors.primaryLight,
+                                  child: Icon(
+                                    _getIconForType(item.notificationType),
+                                    color: item.isRead ? AppColors.textSecondary : AppColors.primary,
+                                  ),
+                                ),
+                                title: Text(
+                                  item.title,
+                                  style: AppTextStyles.labelLarge.copyWith(
+                                    fontWeight: item.isRead ? FontWeight.normal : FontWeight.bold,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      item.summary ?? '',
+                                      style: AppTextStyles.bodySmall.copyWith(
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      _formatTimestamp(item.createdAt),
+                                      style: AppTextStyles.bodySmall.copyWith(
+                                        fontSize: 11,
+                                        color: AppColors.textSecondary.withOpacity(0.7),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => NotificationDetailPage(
+                                        notificationId: item.notificationId,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 4),
-                              Text(
-                                item.message,
-                                style: AppTextStyles.bodySmall.copyWith(
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                _formatTimestamp(item.createdAt),
-                                style: AppTextStyles.bodySmall.copyWith(
-                                  fontSize: 11,
-                                  color: AppColors.textSecondary.withOpacity(0.7),
-                                ),
-                              ),
-                            ],
-                          ),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => NotificationDetailPage(
-                                  notificationId: item.notificationId,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      );
-                    },
-                  ),
+                          );
+                        },
+                      ),
+                    ),
+    );
+  }
+
+  Widget _buildErrorState(String error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline_rounded, size: 64, color: Colors.redAccent),
+            const SizedBox(height: 16),
+            Text(
+              'Gagal Memuat Notifikasi',
+              style: AppTextStyles.labelLarge.copyWith(color: AppColors.textPrimary),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              error,
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () {
+                Provider.of<NotificationProvider>(context, listen: false).fetchNotifications();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
+              ),
+              child: const Text('Coba Lagi'),
+            )
+          ],
+        ),
+      ),
     );
   }
 
@@ -130,7 +197,14 @@ class _NotifikasiPageState extends State<NotifikasiPage> {
       case 'screening':
         return Icons.medical_services_outlined;
       case 'medication':
+      case 'reminder':
+      case 'care_reminder':
         return Icons.medication_outlined;
+      case 'appointment':
+        return Icons.calendar_month_outlined;
+      case 'system':
+      case 'announcement':
+        return Icons.campaign_outlined;
       default:
         return Icons.notifications_none_rounded;
     }

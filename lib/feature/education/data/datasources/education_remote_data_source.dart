@@ -139,6 +139,9 @@ class EducationRemoteDataSourceImpl implements EducationRemoteDataSource {
       );
     }
 
+    final rawRefs = (json['references'] as List<dynamic>?) ?? [];
+    final references = rawRefs.map((e) => ScientificReference.fromJson(e as Map<String, dynamic>)).toList();
+
     return EducationContent(
       contentId: (json['content_id'] ?? json['id'] ?? '') as String,
       title: (json['title'] ?? '') as String,
@@ -157,6 +160,7 @@ class EducationRemoteDataSourceImpl implements EducationRemoteDataSource {
           ? DateTime.parse(json['published_at'] as String)
           : null,
       userProgress: userProgress,
+      references: references,
     );
   }
 }

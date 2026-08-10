@@ -9,18 +9,22 @@ import '../../../doctor/presentation/pages/doctor_dashboard_page.dart';
 import '../../../doctor/presentation/pages/doctor_patients_page.dart';
 import '../../../doctor/presentation/pages/doctor_consultations_page.dart';
 import '../../../education/presentation/pages/education_list_page.dart';
+import '../../../education/presentation/providers/education_provider.dart';
 import '../../../../core/service/fcm_service.dart';
 import '../widgets/patient_bottom_navigation_bar.dart';
 import 'home_page.dart';
+import '../providers/dashboard_provider.dart';
+import '../providers/care_provider.dart';
+import '../../../doctor/presentation/providers/doctor_dashboard_provider.dart';
 
 class MainNavigationPage extends StatefulWidget {
   const MainNavigationPage({super.key});
 
   @override
-  State<MainNavigationPage> createState() => _MainNavigationPageState();
+  State<MainNavigationPage> createState() => MainNavigationPageState();
 }
 
-class _MainNavigationPageState extends State<MainNavigationPage> {
+class MainNavigationPageState extends State<MainNavigationPage> {
   int _selectedIndex = 0;
 
   @override
@@ -31,9 +35,28 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
     });
   }
 
-  void _onTabSelected(int index) {
+  void onTabSelected(int index) {
     setState(() {
       _selectedIndex = index;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final bool isDoctor = authProvider.userRole == UserRole.doctor;
+      
+      if (isDoctor) {
+        if (index == 0) {
+          Provider.of<DoctorDashboardProvider>(context, listen: false).fetchDashboard();
+        }
+      } else {
+        if (index == 0) {
+          Provider.of<DashboardProvider>(context, listen: false).fetchDashboard();
+          Provider.of<CareProvider>(context, listen: false).loadCareData();
+        } else if (index == 2) {
+          Provider.of<EducationProvider>(context, listen: false).fetchContents();
+        }
+      }
     });
   }
 
@@ -43,7 +66,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
     final bool isDoctor = authProvider.userRole == UserRole.doctor;
 
     final List<Widget> patientPages = [
-      HomePage(onStartScreeningTap: () => _onTabSelected(1)),
+      HomePage(onStartScreeningTap: () => onTabSelected(1)),
       const ScreeningPage(),
       const EducationListPage(),
       const ProfilePage(),
@@ -51,8 +74,8 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
 
     final List<Widget> doctorPages = [
       DoctorDashboardPage(
-        onPatientsTabTap: () => _onTabSelected(1),
-        onConsultationsTabTap: () => _onTabSelected(2),
+        onPatientsTabTap: () => onTabSelected(1),
+        onConsultationsTabTap: () => onTabSelected(2),
       ),
       const DoctorPatientsPage(),
       const DoctorConsultationsPage(),
@@ -77,11 +100,11 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
             child: isDoctor
                 ? DoctorBottomNavigationBar(
                     selectedIndex: _selectedIndex,
-                    onTabSelected: _onTabSelected,
+                    onTabSelected: onTabSelected,
                   )
                 : PatientBottomNavigationBar(
                     selectedIndex: _selectedIndex,
-                    onTabSelected: _onTabSelected,
+                    onTabSelected: onTabSelected,
                   ),
           ),
         ],

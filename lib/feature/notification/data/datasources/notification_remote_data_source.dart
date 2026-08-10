@@ -8,6 +8,8 @@ abstract class NotificationRemoteDataSource {
   Future<void> markAsRead(String notificationId);
   Future<void> markAllAsRead();
   Future<void> registerDeviceToken({required String fcmToken, required String deviceId});
+  Future<void> unregisterDeviceToken({required String deviceId});
+  Future<void> deleteNotification(String notificationId);
   Future<NotificationPreferencesDTO> getNotificationPreferences();
   Future<NotificationPreferencesDTO> updateNotificationPreferences(NotificationPreferencesDTO preferences);
 }
@@ -26,7 +28,9 @@ class NotificationRemoteDataSourceImpl implements NotificationRemoteDataSource {
         'page': page,
       },
     );
-    final list = response.data as List<dynamic>;
+    final data = response.data;
+    if (data == null) return [];
+    final list = data as List<dynamic>;
     return list.map((e) => NotificationDTO.fromJson(e as Map<String, dynamic>)).toList();
   }
 
@@ -55,6 +59,21 @@ class NotificationRemoteDataSourceImpl implements NotificationRemoteDataSource {
         'device_id': deviceId,
       },
     );
+  }
+
+  @override
+  Future<void> unregisterDeviceToken({required String deviceId}) async {
+    await apiService.dio.delete(
+      '/api/v1/notifications/device-token',
+      data: {
+        'device_id': deviceId,
+      },
+    );
+  }
+
+  @override
+  Future<void> deleteNotification(String notificationId) async {
+    await apiService.dio.delete('/api/v1/notifications/$notificationId');
   }
 
   @override

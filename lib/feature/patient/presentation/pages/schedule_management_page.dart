@@ -41,91 +41,74 @@ class ScheduleManagementPage extends ConsumerWidget {
             itemBuilder: (context, index) {
               final schedule = schedules[index];
 
-              return Dismissible(
-                key: Key(schedule.scheduleId),
-                direction: DismissDirection.horizontal,
-                background: Container(
-                  alignment: Alignment.centerLeft,
-                  padding: const EdgeInsets.only(left: 20),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Icon(Icons.edit_rounded, color: Colors.white),
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.border.withOpacity(0.5)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.01),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                secondaryBackground: Container(
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.redAccent,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Icon(Icons.delete_outline_rounded, color: Colors.white),
-                ),
-                confirmDismiss: (direction) async {
-                  if (direction == DismissDirection.startToEnd) {
-                    // Swipe left-to-right: Edit schedule
-                    _editScheduleTime(context, ref, schedule.scheduleId, schedule.reminderTime, schedule.isActive);
-                    return false; // Do not dismiss widget
-                  } else {
-                    // Swipe right-to-left: Delete schedule
-                    final confirm = await _showDeleteConfirmation(context);
-                    if (confirm == true) {
-                      ref.read(careNotifierProvider.notifier).deleteSchedule(schedule.scheduleId);
-                      return true;
-                    }
-                    return false;
-                  }
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.border.withOpacity(0.5)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.alarm_rounded, color: AppColors.primary, size: 22),
-                          const SizedBox(width: 14),
-                          Text(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.alarm_rounded, color: AppColors.primary, size: 22),
+                        const SizedBox(width: 14),
+                        Text(
+                          schedule.reminderTime,
+                          style: AppTextStyles.labelLarge.copyWith(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit_rounded, color: AppColors.primary, size: 20),
+                          tooltip: 'Ubah Waktu',
+                          onPressed: () => _editScheduleTime(
+                            context,
+                            ref,
+                            schedule.scheduleId,
                             schedule.reminderTime,
-                            style: AppTextStyles.labelLarge.copyWith(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            schedule.isActive,
                           ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          Tooltip(
-                            message: 'Geser kanan untuk ubah, kiri untuk hapus',
-                            child: Icon(
-                              Icons.swap_horizontal_circle_outlined,
-                              size: 16,
-                              color: AppColors.textSecondary.withOpacity(0.5),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Switch(
-                            value: schedule.isActive,
-                            onChanged: (val) {
-                              ref.read(careNotifierProvider.notifier).updateSchedule(
-                                    schedule.scheduleId,
-                                    schedule.reminderTime,
-                                    val,
-                                  );
-                            },
-                            activeColor: AppColors.primary,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
+                          tooltip: 'Hapus Jadwal',
+                          onPressed: () async {
+                            final confirm = await _showDeleteConfirmation(context);
+                            if (confirm == true) {
+                              ref.read(careNotifierProvider.notifier).deleteSchedule(schedule.scheduleId);
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 4),
+                        Switch(
+                          value: schedule.isActive,
+                          onChanged: (val) {
+                            ref.read(careNotifierProvider.notifier).updateSchedule(
+                                  schedule.scheduleId,
+                                  schedule.reminderTime,
+                                  val,
+                                );
+                          },
+                          activeColor: AppColors.primary,
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               );
             },

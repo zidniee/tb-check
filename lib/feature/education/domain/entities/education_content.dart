@@ -19,6 +19,7 @@ class EducationContent {
   final String? sourceUrl;
   final String authorName;
   final DateTime? publishedAt;
+  final List<ScientificReference> references;
 
   /// Optional user reading progress (populated when user is authenticated).
   final ReadingProgress? userProgress;
@@ -39,6 +40,7 @@ class EducationContent {
     required this.authorName,
     this.publishedAt,
     this.userProgress,
+    this.references = const [],
   });
 
   bool get isArticle => contentType == EducationContentType.article;
@@ -76,6 +78,7 @@ class EducationContent {
     String? authorName,
     DateTime? publishedAt,
     ReadingProgress? userProgress,
+    List<ScientificReference>? references,
   }) {
     return EducationContent(
       contentId: contentId ?? this.contentId,
@@ -93,7 +96,54 @@ class EducationContent {
       authorName: authorName ?? this.authorName,
       publishedAt: publishedAt ?? this.publishedAt,
       userProgress: userProgress ?? this.userProgress,
+      references: references ?? this.references,
     );
+  }
+
+  factory EducationContent.fromJson(Map<String, dynamic> json) {
+    return EducationContent(
+      contentId: (json['content_id'] ?? '') as String,
+      title: (json['title'] ?? '') as String,
+      summary: (json['summary'] ?? '') as String,
+      body: json['body'] as String?,
+      contentType: (json['content_type'] as String?)?.toLowerCase() == 'video'
+          ? EducationContentType.video
+          : EducationContentType.article,
+      imageUrl: json['image_url'] as String?,
+      videoUrl: json['video_url'] as String?,
+      youtubeVideoId: json['youtube_video_id'] as String?,
+      thumbnailUrl: json['thumbnail_url'] as String?,
+      durationSeconds: (json['duration_seconds'] as num?)?.toInt() ?? 0,
+      tags: (json['tags'] as List<dynamic>? ?? const []).map((e) => e as String).toList(),
+      sourceUrl: json['source_url'] as String?,
+      authorName: (json['author_name'] ?? '') as String,
+      publishedAt: json['published_at'] != null ? DateTime.tryParse(json['published_at'] as String) : null,
+      userProgress: json['user_progress'] != null ? ReadingProgress.fromJson(json['user_progress'] as Map<String, dynamic>) : null,
+      references: (json['references'] as List<dynamic>? ?? const [])
+          .map((e) => ScientificReference.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'content_id': contentId,
+      'title': title,
+      'summary': summary,
+      'body': body,
+      'content_type': contentType == EducationContentType.video ? 'video' : 'article',
+      'image_url': imageUrl,
+      'video_url': videoUrl,
+      'youtube_video_id': youtubeVideoId,
+      'thumbnail_url': thumbnailUrl,
+      'duration_seconds': durationSeconds,
+      'tags': tags,
+      'source_url': sourceUrl,
+      'author_name': authorName,
+      'published_at': publishedAt?.toIso8601String(),
+      'user_progress': userProgress?.toJson(),
+      'references': references.map((e) => e.toJson()).toList(),
+    };
   }
 }
 
@@ -110,4 +160,67 @@ class ReadingProgress {
     required this.lastPosition,
     this.startedAt,
   });
+
+  factory ReadingProgress.fromJson(Map<String, dynamic> json) {
+    return ReadingProgress(
+      isCompleted: (json['is_completed'] as bool?) ?? false,
+      progressPercent: (json['progress_percent'] as num?)?.toInt() ?? 0,
+      lastPosition: (json['last_position'] as num?)?.toInt() ?? 0,
+      startedAt: json['started_at'] != null ? DateTime.tryParse(json['started_at'] as String) : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'is_completed': isCompleted,
+      'progress_percent': progressPercent,
+      'last_position': lastPosition,
+      'started_at': startedAt?.toIso8601String(),
+    };
+  }
+}
+
+/// Represents a scientific reference / publication for the phytochemical herbal encyclopedia.
+class ScientificReference {
+  final String referenceId;
+  final String? compoundId;
+  final String? contentId;
+  final String journalName;
+  final int year;
+  final String? doi;
+  final String? url;
+
+  const ScientificReference({
+    required this.referenceId,
+    this.compoundId,
+    this.contentId,
+    required this.journalName,
+    required this.year,
+    this.doi,
+    this.url,
+  });
+
+  factory ScientificReference.fromJson(Map<String, dynamic> json) {
+    return ScientificReference(
+      referenceId: (json['reference_id'] ?? json['id'] ?? '') as String,
+      compoundId: json['compound_id'] as String?,
+      contentId: json['content_id'] as String?,
+      journalName: (json['journal_name'] ?? '') as String,
+      year: (json['year'] as num?)?.toInt() ?? 2026,
+      doi: json['doi'] as String?,
+      url: json['url'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'reference_id': referenceId,
+      'compound_id': compoundId,
+      'content_id': contentId,
+      'journal_name': journalName,
+      'year': year,
+      'doi': doi,
+      'url': url,
+    };
+  }
 }

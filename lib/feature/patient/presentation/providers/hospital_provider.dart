@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import '../../../../core/storage/cache_service.dart';
 import '../../../../core/network/api_service.dart';
 import '../../data/datasources/hospital_remote_data_source.dart';
 import '../../data/models/hospital_dto.dart';
@@ -35,21 +37,47 @@ class HospitalProvider extends ChangeNotifier {
 
   /// Fetches all hospitals from the remote source
   Future<void> fetchHospitals() async {
-    _isLoading = true;
     _errorMessage = null;
-    notifyListeners();
+
+    // 1. Try to load cached hospitals instantly
+    try {
+      final cachedStr = await CacheService().getCachedData('cache_hospitals');
+      if (cachedStr != null && _hospitals.isEmpty) {
+        final List<dynamic> jsonList = jsonDecode(cachedStr);
+        _hospitals = jsonList.map((e) => HospitalDTO.fromJson(e as Map<String, dynamic>)).toList();
+        _filteredHospitals = List.from(_hospitals);
+        if (_userPosition != null) {
+          _calculateDistancesAndSort();
+        }
+        notifyListeners();
+      }
+    } catch (_) {}
+
+    // Only show loading if we have no hospitals yet
+    if (_hospitals.isEmpty) {
+      _isLoading = true;
+      notifyListeners();
+    }
 
     final result = await _hospitalRepository.getAllHospitals();
 
     result.fold(
       (failure) {
-        _errorMessage = failure.message;
-        _hospitals = [];
-        _filteredHospitals = [];
+        if (_hospitals.isEmpty) {
+          _errorMessage = failure.message;
+          _hospitals = [];
+          _filteredHospitals = [];
+        }
       },
       (data) {
         _hospitals = data.where((h) => h.isActive).toList();
         _filteredHospitals = List.from(_hospitals);
+
+        // Save to cache
+        try {
+          final jsonList = _hospitals.map((e) => e.toJson()).toList();
+          CacheService().cacheData('cache_hospitals', jsonEncode(jsonList));
+        } catch (_) {}
         
         // If we already have the user position, calculate distances and sort immediately
         if (_userPosition != null) {

@@ -7,6 +7,7 @@ class AuthInterceptor extends Interceptor {
   final Dio dio;
   final SecureStorageService storage;
   final LogoutCallback? onLogoutRequired;
+  Future<bool>? _refreshFuture;
 
   AuthInterceptor({
     required this.dio,
@@ -53,11 +54,28 @@ class AuthInterceptor extends Interceptor {
   }
 
   Future<bool> _attemptTokenRefresh() async {
+    if (_refreshFuture != null) {
+      return _refreshFuture!;
+    }
+
+    _refreshFuture = _performTokenRefresh();
+    try {
+      return await _refreshFuture!;
+    } finally {
+      _refreshFuture = null;
+    }
+  }
+
+  Future<bool> _performTokenRefresh() async {
     final refreshToken = await storage.getRefreshToken();
     if (refreshToken == null || refreshToken.isEmpty) return false;
 
     try {
-      final refreshDio = Dio(BaseOptions(baseUrl: dio.options.baseUrl));
+      final refreshDio = Dio(BaseOptions(
+        baseUrl: dio.options.baseUrl,
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 10),
+      ));
       final response = await refreshDio.post('/auth/refresh', data: {
         'refresh_token': refreshToken,
       });
