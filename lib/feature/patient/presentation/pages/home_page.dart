@@ -64,10 +64,6 @@ class _HomePageState extends State<HomePage> {
 
 
 
-              // Medication Schedule Card
-              const MedicationScheduleCard(),
-              const SizedBox(height: 24),
-
               // Activity Recaps Header
               DashboardSectionHeader(
                 title: 'Ringkasan Aktivitas',
@@ -134,6 +130,10 @@ class _HomePageState extends State<HomePage> {
                   ],
                 ),
               ),
+              const SizedBox(height: 24),
+
+              // Medication Schedule Card
+              const MedicationScheduleCard(),
               const SizedBox(height: 24),
 
               // Quick Actions Header

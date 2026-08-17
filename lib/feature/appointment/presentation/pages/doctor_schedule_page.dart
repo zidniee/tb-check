@@ -173,7 +173,7 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                           border: Border.all(color: AppColors.border),
                         ),
                         child: Row(
-                          mainAxisAlignment: MainAxisAlignment.between,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
                               "${_selectedDate.day}-${_selectedDate.month}-${_selectedDate.year}",
@@ -202,7 +202,7 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                           border: Border.all(color: AppColors.border),
                         ),
                         child: Row(
-                          mainAxisAlignment: MainAxisAlignment.between,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
                               "${_selectedTime.hour.toString().padLeft(2, '0')}:${_selectedTime.minute.toString().padLeft(2, '0')}",
@@ -297,7 +297,7 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                                 if (!context.mounted) return;
                                 if (ok) {
                                   SnackBarUtils.showSuccess(context, 'Janji temu berhasil diajukan!');
-                                  Navigator.pop(context);
+                                  Navigator.pop(context, true);
                                 } else {
                                   SnackBarUtils.showError(context, provider.errorMessage ?? 'Gagal membuat janji temu');
                                 }

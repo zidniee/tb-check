@@ -6,6 +6,7 @@ import '../../../../core/network/error_handler.dart';
 import '../../domain/repositories/appointment_repository.dart';
 import '../datasources/appointment_remote_data_source.dart';
 import '../models/appointment_models.dart';
+import '../../../doctor/data/models/nearest_doctor_dto.dart';
 
 class AppointmentRepositoryImpl implements AppointmentRepository {
   final AppointmentRemoteDataSource remoteDataSource;
@@ -112,6 +113,26 @@ class AppointmentRepositoryImpl implements AppointmentRepository {
   Future<Either<ApiException, AppointmentDashboard>> getDashboard() async {
     try {
       final res = await remoteDataSource.getDashboard();
+      return Right(res);
+    } on DioException catch (e) {
+      return Left(ErrorHandler.handleDioError(e));
+    } catch (e) {
+      return Left(ServerException(message: e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<ApiException, List<NearestDoctorDTO>>> getNearestDoctors({
+    required double latitude,
+    required double longitude,
+    double radiusKm = 50.0,
+  }) async {
+    try {
+      final res = await remoteDataSource.getNearestDoctors(
+        latitude: latitude,
+        longitude: longitude,
+        radiusKm: radiusKm,
+      );
       return Right(res);
     } on DioException catch (e) {
       return Left(ErrorHandler.handleDioError(e));

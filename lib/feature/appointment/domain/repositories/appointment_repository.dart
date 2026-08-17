@@ -1,5 +1,6 @@
 import 'package:dartz/dartz.dart';
 import '../../../../core/network/api_exception.dart';
+import '../../../doctor/data/models/nearest_doctor_dto.dart';
 import '../../data/models/appointment_models.dart';
 
 abstract class AppointmentRepository {
@@ -17,4 +18,9 @@ abstract class AppointmentRepository {
     int pageSize,
   });
   Future<Either<ApiException, AppointmentDashboard>> getDashboard();
+  Future<Either<ApiException, List<NearestDoctorDTO>>> getNearestDoctors({
+    required double latitude,
+    required double longitude,
+    double radiusKm = 50.0,
+  });
 }

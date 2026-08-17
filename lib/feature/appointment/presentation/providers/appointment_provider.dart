@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/network/api_service.dart';
+import '../../../doctor/data/models/nearest_doctor_dto.dart';
 import '../../data/datasources/appointment_remote_data_source.dart';
 import '../../data/models/appointment_models.dart';
 import '../../data/repositories/appointment_repository_impl.dart';
@@ -7,6 +8,7 @@ import '../../domain/repositories/appointment_repository.dart';
 
 class AppointmentProvider extends ChangeNotifier {
   final AppointmentRepository _repository;
+  List<NearestDoctorDTO> _nearestDoctors = [];
 
   AppointmentProvider({AppointmentRepository? repository})
       : _repository = repository ??
@@ -177,6 +179,27 @@ class AppointmentProvider extends ChangeNotifier {
     result.fold(
       (failure) => _errorMessage = failure.message,
       (data) => _dashboard = data,
+    );
+
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  List<NearestDoctorDTO> get nearestDoctors => _nearestDoctors;
+
+  Future<void> loadNearestDoctors({required double latitude, required double longitude, double radiusKm = 50.0}) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    final result = await _repository.getNearestDoctors(
+      latitude: latitude,
+      longitude: longitude,
+      radiusKm: radiusKm,
+    );
+    result.fold(
+      (failure) => _errorMessage = failure.message,
+      (data) => _nearestDoctors = data,
     );
 
     _isLoading = false;

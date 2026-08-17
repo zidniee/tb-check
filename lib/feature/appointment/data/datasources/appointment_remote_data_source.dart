@@ -1,4 +1,5 @@
 import '../../../../core/network/api_service.dart';
+import '../../../doctor/data/models/nearest_doctor_dto.dart';
 import '../models/appointment_models.dart';
 
 abstract class AppointmentRemoteDataSource {
@@ -16,6 +17,11 @@ abstract class AppointmentRemoteDataSource {
     int pageSize = 10,
   });
   Future<AppointmentDashboard> getDashboard();
+  Future<List<NearestDoctorDTO>> getNearestDoctors({
+    required double latitude,
+    required double longitude,
+    double radiusKm = 50.0,
+  });
 }
 
 class AppointmentRemoteDataSourceImpl implements AppointmentRemoteDataSource {
@@ -86,5 +92,23 @@ class AppointmentRemoteDataSourceImpl implements AppointmentRemoteDataSource {
   Future<AppointmentDashboard> getDashboard() async {
     final res = await apiService.dio.get('/api/v1/appointments/dashboard');
     return AppointmentDashboard.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  @override
+  Future<List<NearestDoctorDTO>> getNearestDoctors({
+    required double latitude,
+    required double longitude,
+    double radiusKm = 50.0,
+  }) async {
+    final res = await apiService.dio.get(
+      '/api/v1/doctors/nearest',
+      queryParameters: {
+        'lat': latitude,
+        'lon': longitude,
+        'radius_km': radiusKm,
+      },
+    );
+    final list = res.data as List<dynamic>;
+    return list.map((e) => NearestDoctorDTO.fromJson(e as Map<String, dynamic>)).toList();
   }
 }

@@ -4,6 +4,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../providers/appointment_provider.dart';
 import 'appointment_detail_page.dart';
 import 'appointment_history_page.dart';
+import 'doctor_list_page.dart';
 
 class AppointmentListPage extends StatefulWidget {
   const AppointmentListPage({super.key});
@@ -182,6 +183,26 @@ class _AppointmentListPageState extends State<AppointmentListPage> {
                     },
                   ),
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const DoctorListPage(),
+            ),
+          ).then((value) {
+            if (value == true) {
+              provider.loadMyAppointments();
+            }
+          });
+        },
+        backgroundColor: AppColors.primary,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text(
+          'Buat Janji Temu',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+      ),
     );
   }
 
@@ -201,6 +222,34 @@ class _AppointmentListPageState extends State<AppointmentListPage> {
             'Jadwal konsultasi atau janji temu aktif Anda\nakan muncul di sini.',
             textAlign: TextAlign.center,
             style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const DoctorListPage(),
+                ),
+              ).then((value) {
+                if (value == true) {
+                  context.read<AppointmentProvider>().loadMyAppointments();
+                }
+              });
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            icon: const Icon(Icons.add, size: 20),
+            label: const Text(
+              'Buat Janji Temu',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
