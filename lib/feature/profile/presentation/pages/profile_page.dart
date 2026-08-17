@@ -16,6 +16,7 @@ import '../providers/profile_provider.dart';
 import 'edit_profile_page.dart';
 import 'profile_picture_viewer_page.dart';
 import 'notification_settings_page.dart';
+import 'help_center_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -140,7 +141,12 @@ class _ProfilePageState extends State<ProfilePage> {
                   iconBgColor: Colors.blueGrey.shade50,
                   title: 'Pusat Bantuan & FAQ',
                   subtitle: 'Butuh bantuan tentang TBCheck?',
-                  onTap: () => SnackBarUtils.showInfo(context, 'Fitur pusat bantuan segera hadir.'),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const HelpCenterPage()),
+                    );
+                  },
                 ),
               ]),
               const SizedBox(height: 24),
