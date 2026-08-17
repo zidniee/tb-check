@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../patient/presentation/pages/hospital_list_page.dart';
 import '../../domain/entities/screening_result.dart';
-import '../../../patient/presentation/pages/main_navigation_page.dart';
 import '../../../patient/presentation/providers/dashboard_provider.dart';
 
 class ScreeningResultPage extends StatelessWidget {
@@ -11,11 +10,14 @@ class ScreeningResultPage extends StatelessWidget {
   final int age;
   final List<int> encodedAnswers;
 
+  final VoidCallback? onNavigateToEducation;
+
   const ScreeningResultPage({
     super.key,
     required this.result,
     required this.age,
     required this.encodedAnswers,
+    this.onNavigateToEducation,
   });
 
   @override
@@ -250,7 +252,9 @@ class ScreeningResultPage extends StatelessWidget {
                   onPressed: () {
                     Provider.of<DashboardProvider>(context, listen: false).fetchDashboard();
                     Navigator.of(context).popUntil((route) => route.isFirst);
-                    context.findAncestorStateOfType<MainNavigationPageState>()?.onTabSelected(2);
+                    if (onNavigateToEducation != null) {
+                      onNavigateToEducation!();
+                    }
                   },
                   icon: const Icon(Icons.local_florist_rounded, size: 20, color: Colors.white),
                   label: const Text('Lihat Edukasi Pencegahan Herbal'),

@@ -5,10 +5,12 @@ import '../pages/screening_result_page.dart';
 
 class RecordingStep extends StatefulWidget {
   final ScreeningProvider provider;
+  final VoidCallback? onNavigateToEducation;
 
   const RecordingStep({
     super.key,
     required this.provider,
+    this.onNavigateToEducation,
   });
 
   @override
@@ -56,10 +58,11 @@ class _RecordingStepState extends State<RecordingStep> with SingleTickerProvider
             
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (context) => ScreeningResultPage(
+                builder: (_) => ScreeningResultPage(
                   result: result,
                   age: age,
                   encodedAnswers: answers,
+                  onNavigateToEducation: widget.onNavigateToEducation,
                 ),
               ),
             );

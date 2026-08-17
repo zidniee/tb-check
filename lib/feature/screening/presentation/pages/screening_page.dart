@@ -8,6 +8,7 @@ import '../widgets/questionnaire_step.dart';
 import '../widgets/recording_step.dart';
 import '../widgets/screening_bottom_actions.dart';
 import '../widgets/screening_stepper_header.dart';
+import '../../../patient/presentation/pages/main_navigation_page.dart';
 
 class ScreeningPage extends StatefulWidget {
   const ScreeningPage({super.key});
@@ -105,7 +106,12 @@ class _ScreeningPageState extends State<ScreeningPage> {
                                   ageController: _ageController,
                                   questions: _questions,
                                 )
-                              : RecordingStep(provider: provider),
+                              : RecordingStep(
+                                  provider: provider,
+                                  onNavigateToEducation: () {
+                                    context.findAncestorStateOfType<MainNavigationPageState>()?.onTabSelected(2);
+                                  },
+                                ),
                         ),
                       ),
                       
