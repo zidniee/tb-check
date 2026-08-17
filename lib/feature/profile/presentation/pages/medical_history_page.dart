@@ -54,7 +54,7 @@ class _MedicalHistoryPageState extends State<MedicalHistoryPage> {
               Text(
                 'Gagal memuat riwayat medis: ${provider.errorMessage}',
                 style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
-                textAlign: Center,
+                textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
               ElevatedButton(
@@ -92,13 +92,13 @@ class _MedicalHistoryPageState extends State<MedicalHistoryPage> {
               const SizedBox(height: 16),
               Text(
                 'Belum Ada Riwayat Medis',
-                style: AppTextStyles.titleMedium.copyWith(fontWeight: FontWeight.bold),
+                style: AppTextStyles.labelLarge.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               Text(
                 'Lakukan skrining mandiri batuk Anda terlebih dahulu untuk melihat log riwayat kesehatan.',
                 style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
-                textAlign: Center,
+                textAlign: TextAlign.center,
               ),
             ],
           ),

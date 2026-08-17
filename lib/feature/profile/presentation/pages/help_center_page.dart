@@ -151,7 +151,7 @@ class _HelpCenterPageState extends State<HelpCenterPage> {
                       child: Text(
                         'Tidak ditemukan jawaban yang cocok dengan pencarian Anda.',
                         style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
-                        textAlign: Center,
+                        textAlign: TextAlign.center,
                       ),
                     ),
                   )

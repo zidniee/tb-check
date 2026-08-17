@@ -164,7 +164,9 @@ class _AppointmentListPageState extends State<AppointmentListPage> {
                                     const Icon(Icons.access_time, size: 16, color: AppColors.primary),
                                     const SizedBox(width: 6),
                                     Text(
-                                      "${_getDayName(item.schedule.dayOfWeek)}, ${item.schedule.startTime} - ${item.schedule.endTime}",
+                                      item.schedule != null
+                                          ? "${_getDayName(item.schedule!.dayOfWeek)}, ${item.schedule!.startTime} - ${item.schedule!.endTime}"
+                                          : "${item.appointmentDate}, ${item.appointmentTime}",
                                       style: AppTextStyles.bodySmall.copyWith(
                                         fontWeight: FontWeight.bold,
                                         color: AppColors.textPrimary,
