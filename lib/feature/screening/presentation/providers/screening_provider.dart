@@ -11,6 +11,7 @@ import '../../data/datasources/screening_remote_data_source.dart';
 import '../../data/repositories/screening_repository_impl.dart';
 import '../../domain/entities/screening_result.dart';
 import '../../domain/repositories/screening_repository.dart';
+import '../../data/models/screening_report_dto.dart';
 
 enum ScreeningState { idle, recording, processing, analyzing, resultReady, error }
 
@@ -100,6 +101,33 @@ class ScreeningProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     return true;
+  }
+
+  // --- Reports History ---
+  List<ScreeningReportDTO> _myReports = [];
+  bool _isLoadingReports = false;
+
+  List<ScreeningReportDTO> get myReports => _myReports;
+  bool get isLoadingReports => _isLoadingReports;
+
+  Future<void> loadMyReports() async {
+    _isLoadingReports = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    final res = await _screeningRepository.getMyReports();
+    res.fold(
+      (failure) {
+        _errorMessage = failure.message;
+        _isLoadingReports = false;
+        notifyListeners();
+      },
+      (reports) {
+        _myReports = reports;
+        _isLoadingReports = false;
+        notifyListeners();
+      },
+    );
   }
 
   /// Encodes questionnaire answers to a binary list of 1s and 0s (FR-003)

@@ -17,6 +17,7 @@ import 'edit_profile_page.dart';
 import 'profile_picture_viewer_page.dart';
 import 'notification_settings_page.dart';
 import 'help_center_page.dart';
+import 'medical_history_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -100,7 +101,12 @@ class _ProfilePageState extends State<ProfilePage> {
                     iconBgColor: AppColors.secondaryLight,
                     title: 'Riwayat Medis',
                     subtitle: 'Lihat catatan dan hasil skrining TBC',
-                    onTap: () => SnackBarUtils.showInfo(context, 'Fitur riwayat medis segera hadir.'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const MedicalHistoryPage()),
+                      );
+                    },
                   ),
                 ],
               ]),
@@ -342,38 +348,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildStatItem(String value, String label) {
-    return Expanded(
-      child: Column(
-        children: [
-          Text(
-            value,
-            style: AppTextStyles.labelLarge.copyWith(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: AppTextStyles.bodySmall.copyWith(
-              fontSize: 11,
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildDividerVertical() {
-    return Container(
-      height: 24,
-      width: 1,
-      color: AppColors.border,
-    );
-  }
 
   Widget _buildSectionTitle(String title) {
     return Padding(
