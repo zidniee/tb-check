@@ -34,8 +34,8 @@ class _DoctorListPageState extends State<DoctorListPage> {
   }
 
   Future<void> _fetchDoctors() async {
-    double lat = -6.208763; // Default: Jakarta
-    double lon = 106.845599;
+    double lat = -7.5684; // Default: Surakarta (matching seed data)
+    double lon = 110.8215;
 
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -60,7 +60,7 @@ class _DoctorListPageState extends State<DoctorListPage> {
       context.read<AppointmentProvider>().loadNearestDoctors(
             latitude: lat,
             longitude: lon,
-            radiusKm: 100.0, // Large radius to ensure doctors are found in development
+            radiusKm: 1000.0, // Large radius to ensure doctors are found in development
           );
     }
   }
