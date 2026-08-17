@@ -62,37 +62,51 @@ class DoctorBrief {
 class Appointment {
   final String appointmentId;
   final DoctorBrief doctor;
-  final DoctorSchedule schedule;
-  final String appointmentDate; // "YYYY-MM-DD"
+  final DoctorSchedule? schedule; // nullable now
+  final String appointmentDate;   // "YYYY-MM-DD"
+  final String appointmentTime;   // "HH:MM"
   final String complaint;
   final String? screeningResultId;
-  final String status; // PENDING | CONFIRMED | ...
+  final String status;            // PENDING | CONFIRMED | ...
   final String notes;
   final String cancelReason;
   final String rescheduleReason;
   final String createdAt;
   final String updatedAt;
 
-  Appointment({required this.appointmentId, required this.doctor,
-    required this.schedule, required this.appointmentDate, required this.complaint,
-    this.screeningResultId, required this.status, required this.notes,
-    required this.cancelReason, required this.rescheduleReason,
-    required this.createdAt, required this.updatedAt});
+  Appointment({
+    required this.appointmentId,
+    required this.doctor,
+    this.schedule,
+    required this.appointmentDate,
+    required this.appointmentTime,
+    required this.complaint,
+    this.screeningResultId,
+    required this.status,
+    required this.notes,
+    required this.cancelReason,
+    required this.rescheduleReason,
+    required this.createdAt,
+    required this.updatedAt,
+  });
 
   factory Appointment.fromJson(Map<String, dynamic> json) => Appointment(
-    appointmentId: json['appointment_id'] as String,
-    doctor: DoctorBrief.fromJson(json['doctor'] as Map<String, dynamic>),
-    schedule: DoctorSchedule.fromJson(json['schedule'] as Map<String, dynamic>),
-    appointmentDate: json['appointment_date'] as String,
-    complaint: json['complaint'] as String,
-    screeningResultId: json['screening_result_id'] as String?,
-    status: json['status'] as String,
-    notes: json['notes'] as String? ?? '',
-    cancelReason: json['cancel_reason'] as String? ?? '',
-    rescheduleReason: json['reschedule_reason'] as String? ?? '',
-    createdAt: json['created_at'] as String,
-    updatedAt: json['updated_at'] as String,
-  );
+        appointmentId: json['appointment_id'] as String,
+        doctor: DoctorBrief.fromJson(json['doctor'] as Map<String, dynamic>),
+        schedule: json['schedule'] != null
+            ? DoctorSchedule.fromJson(json['schedule'] as Map<String, dynamic>)
+            : null,
+        appointmentDate: json['appointment_date'] as String,
+        appointmentTime: json['appointment_time'] as String? ?? '',
+        complaint: json['complaint'] as String,
+        screeningResultId: json['screening_result_id'] as String?,
+        status: json['status'] as String,
+        notes: json['notes'] as String? ?? '',
+        cancelReason: json['cancel_reason'] as String? ?? '',
+        rescheduleReason: json['reschedule_reason'] as String? ?? '',
+        createdAt: json['created_at'] as String,
+        updatedAt: json['updated_at'] as String,
+      );
 
   // Helper status
   bool get isPending => status == 'PENDING';
@@ -101,36 +115,51 @@ class Appointment {
 
 // ===================== Request DTO =====================
 class CreateAppointmentRequest {
-  final String scheduleId;
-  final String appointmentDate; // "YYYY-MM-DD"
+  final String doctorId;
+  final String? scheduleId;       // optional now
+  final String appointmentDate;   // "YYYY-MM-DD"
+  final String appointmentTime;   // "HH:MM"
   final String complaint;
   final String? screeningResultId;
 
-  CreateAppointmentRequest({required this.scheduleId,
-    required this.appointmentDate, required this.complaint,
-    this.screeningResultId});
+  CreateAppointmentRequest({
+    required this.doctorId,
+    this.scheduleId,
+    required this.appointmentDate,
+    required this.appointmentTime,
+    required this.complaint,
+    this.screeningResultId,
+  });
 
   Map<String, dynamic> toJson() => {
-    'schedule_id': scheduleId,
-    'appointment_date': appointmentDate,
-    'complaint': complaint,
-    if (screeningResultId != null) 'screening_result_id': screeningResultId,
-  };
+        'doctor_id': doctorId,
+        if (scheduleId != null) 'schedule_id': scheduleId,
+        'appointment_date': appointmentDate,
+        'appointment_time': appointmentTime,
+        'complaint': complaint,
+        if (screeningResultId != null) 'screening_result_id': screeningResultId,
+      };
 }
 
 class RescheduleRequest {
-  final String newScheduleId;
-  final String newDate; // "YYYY-MM-DD"
+  final String? newScheduleId;    // optional now
+  final String newDate;           // "YYYY-MM-DD"
+  final String newTime;           // "HH:MM"
   final String reason;
 
-  RescheduleRequest({required this.newScheduleId, required this.newDate,
-    required this.reason});
+  RescheduleRequest({
+    this.newScheduleId,
+    required this.newDate,
+    required this.newTime,
+    required this.reason,
+  });
 
   Map<String, dynamic> toJson() => {
-    'new_schedule_id': newScheduleId,
-    'new_date': newDate,
-    'reason': reason,
-  };
+        if (newScheduleId != null) 'new_schedule_id': newScheduleId,
+        'new_date': newDate,
+        'new_time': newTime,
+        'reason': reason,
+      };
 }
 
 class CancelRequest {

@@ -102,6 +102,14 @@ class _AppointmentDetailPageState extends State<AppointmentDetailPage> {
   }
 
   void _showRescheduleDialog(Appointment item) {
+    TimeOfDay _newTime = const TimeOfDay(hour: 8, minute: 0);
+    try {
+      final parts = item.appointmentTime.split(':');
+      if (parts.length == 2) {
+        _newTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+      }
+    } catch (_) {}
+
     showDialog(
       context: context,
       builder: (context) {
@@ -129,6 +137,21 @@ class _AppointmentDetailPageState extends State<AppointmentDetailPage> {
                     },
                     child: Text("Pilih Tanggal: ${_newDate.day}-${_newDate.month}-${_newDate.year}"),
                   ),
+                  const SizedBox(height: 8),
+                  ElevatedButton(
+                    onPressed: () async {
+                      final picked = await showTimePicker(
+                        context: context,
+                        initialTime: _newTime,
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          _newTime = picked;
+                        });
+                      }
+                    },
+                    child: Text("Pilih Jam: ${_newTime.hour.toString().padLeft(2, '0')}:${_newTime.minute.toString().padLeft(2, '0')}"),
+                  ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _rescheduleReasonController,
@@ -151,9 +174,11 @@ class _AppointmentDetailPageState extends State<AppointmentDetailPage> {
                       return;
                     }
                     final dateStr = "${_newDate.year}-${_newDate.month.toString().padLeft(2, '0')}-${_newDate.day.toString().padLeft(2, '0')}";
+                    final timeStr = "${_newTime.hour.toString().padLeft(2, '0')}:${_newTime.minute.toString().padLeft(2, '0')}";
                     final req = RescheduleRequest(
-                      newScheduleId: item.schedule.scheduleId, // Keep same schedule slot ID
+                      newScheduleId: item.schedule?.scheduleId,
                       newDate: dateStr,
+                      newTime: timeStr,
                       reason: _rescheduleReasonController.text,
                     );
                     final ok = await this.context.read<AppointmentProvider>().rescheduleAppointment(item.appointmentId, req);
@@ -325,7 +350,9 @@ class _AppointmentDetailPageState extends State<AppointmentDetailPage> {
                             const Icon(Icons.access_time, size: 16, color: AppColors.primary),
                             const SizedBox(width: 8),
                             Text(
-                              "${_getDayName(item.schedule.dayOfWeek)}, ${item.schedule.startTime} - ${item.schedule.endTime}",
+                              item.schedule != null
+                                  ? "${_getDayName(item.schedule!.dayOfWeek)}, ${item.schedule!.startTime} - ${item.schedule!.endTime}"
+                                  : item.appointmentTime,
                               style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.bold),
                             ),
                           ],

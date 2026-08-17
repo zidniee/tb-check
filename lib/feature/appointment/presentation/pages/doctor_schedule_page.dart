@@ -26,15 +26,36 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
   final _complaintController = TextEditingController();
   final _screeningIdController = TextEditingController();
   
-  DoctorSchedule? _selectedSchedule;
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
+  TimeOfDay _selectedTime = const TimeOfDay(hour: 8, minute: 0);
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AppointmentProvider>().loadSchedules(widget.doctorId);
-    });
+  }
+
+  Future<void> _selectTime(BuildContext context) async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primary,
+              onPrimary: Colors.white,
+              onSurface: AppColors.textPrimary,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && picked != _selectedTime) {
+      setState(() {
+        _selectedTime = picked;
+      });
+    }
   }
 
   @override
@@ -165,86 +186,33 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Schedules List
+                    // Time Selection
                     Text(
-                      'Jadwal Praktik Tersedia',
+                      'Waktu Kunjungan',
                       style: AppTextStyles.labelLarge.copyWith(fontSize: 14),
                     ),
                     const SizedBox(height: 8),
-                    if (provider.schedules.isEmpty)
-                      Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(20.0),
-                          child: Text(
-                            'Tidak ada jadwal aktif untuk dokter ini.',
-                            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
-                          ),
+                    InkWell(
+                      onTap: () => _selectTime(context),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppColors.border),
                         ),
-                      )
-                    else
-                      ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: provider.schedules.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 10),
-                        itemBuilder: (context, index) {
-                          final sched = provider.schedules[index];
-                          final isSelected = _selectedSchedule?.scheduleId == sched.scheduleId;
-                          final hasSlots = sched.availableSlots > 0;
-
-                          return InkWell(
-                            onTap: hasSlots
-                                ? () {
-                                    setState(() {
-                                      _selectedSchedule = sched;
-                                    });
-                                  }
-                                : null,
-                            child: Container(
-                              padding: const EdgeInsets.all(14.0),
-                              decoration: BoxDecoration(
-                                color: isSelected ? AppColors.primaryLight.withOpacity(0.3) : Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: isSelected ? AppColors.primary : AppColors.border,
-                                  width: isSelected ? 2 : 1,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.between,
-                                children: [
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _getDayName(sched.dayOfWeek),
-                                        style: AppTextStyles.labelLarge.copyWith(fontSize: 14),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        "${sched.startTime} - ${sched.endTime}",
-                                        style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-                                      ),
-                                    ],
-                                  ),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        hasSlots ? 'Sisa ${sched.availableSlots} slot' : 'Kuota Penuh',
-                                        style: AppTextStyles.bodySmall.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                          color: hasSlots ? Colors.green : Colors.red,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.between,
+                          children: [
+                            Text(
+                              "${_selectedTime.hour.toString().padLeft(2, '0')}:${_selectedTime.minute.toString().padLeft(2, '0')}",
+                              style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.bold),
                             ),
-                          );
-                        },
+                            const Icon(Icons.access_time, color: AppColors.primary, size: 20),
+                          ],
+                        ),
                       ),
+                    ),
                     const SizedBox(height: 24),
 
                     // Complaint Input
@@ -312,15 +280,13 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                       onPressed: provider.isLoading
                           ? null
                           : () async {
-                              if (_selectedSchedule == null) {
-                                SnackBarUtils.showInfo(context, 'Pilih jadwal praktik terlebih dahulu!');
-                                return;
-                              }
                               if (_formKey.currentState!.validate()) {
                                 final dateStr = "${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}";
+                                final timeStr = "${_selectedTime.hour.toString().padLeft(2, '0')}:${_selectedTime.minute.toString().padLeft(2, '0')}";
                                 final req = CreateAppointmentRequest(
-                                  scheduleId: _selectedSchedule!.scheduleId,
+                                  doctorId: widget.doctorId,
                                   appointmentDate: dateStr,
+                                  appointmentTime: timeStr,
                                   complaint: _complaintController.text,
                                   screeningResultId: _screeningIdController.text.isNotEmpty
                                       ? _screeningIdController.text

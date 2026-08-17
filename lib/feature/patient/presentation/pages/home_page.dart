@@ -62,9 +62,7 @@ class _HomePageState extends State<HomePage> {
               _buildTopBar(context),
               const SizedBox(height: 24),
 
-              // Welcome/Greeting Banner
-              _buildGreetingBanner(profileProvider.fullName.split(' ').first),
-              const SizedBox(height: 24),
+
 
               // Medication Schedule Card
               const MedicationScheduleCard(),
@@ -274,91 +272,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildGreetingBanner(String firstName) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
-          colors: [AppColors.primaryLight, AppColors.secondaryLight],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF4E7BA7).withOpacity(0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Selamat pagi, $firstName!',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.labelLarge.copyWith(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              const Text('☀️', style: TextStyle(fontSize: 18)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'AI TBCheck telah menganalisis metrik terbaru Anda. Anda melakukannya dengan sangat baik—mari lanjutkan perjalanan kesehatan Anda.',
-            style: AppTextStyles.bodyMedium.copyWith(
-              color: AppColors.textPrimary.withOpacity(0.7),
-              fontSize: 13,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _buildBannerBadge('🔥 Streak 5 Hari'),
-              const SizedBox(width: 10),
-              _buildBannerBadge('✨ 1.420 XP'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBannerBadge(String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Text(
-        label,
-        style: AppTextStyles.labelMedium.copyWith(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          color: AppColors.textPrimary,
-        ),
-      ),
-    );
-  }
 
   Widget _buildHealthScoreWidget(PatientDashboardDTO? dashboard, bool isLoading) {
     if (isLoading && dashboard == null) {

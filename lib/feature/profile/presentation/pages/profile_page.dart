@@ -301,31 +301,7 @@ class _ProfilePageState extends State<ProfilePage> {
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.border.withOpacity(0.5)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _buildStatItem('4x', 'Skrining'),
-          _buildDividerVertical(),
-          _buildStatItem('5 Hari', 'Streak'),
-          _buildDividerVertical(),
-          _buildStatItem('1.420', 'Poin XP'),
-        ],
-      ),
-    );
+    return const SizedBox.shrink();
   }
 
   Widget _buildInfoRow(IconData icon, String label, String value) {
